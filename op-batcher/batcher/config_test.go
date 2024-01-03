@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher"
+	txmgr "github.com/ethereum-optimism/optimism/op-service/batcher-txmgr"
 	"github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/pprof"
 	"github.com/ethereum-optimism/optimism/op-service/rpc"
-	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 	"github.com/stretchr/testify/require"
 )
 
