@@ -2,16 +2,19 @@ package batcher_txmgr
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"time"
 
 	opservice "github.com/ethereum-optimism/optimism/op-service"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	opsigner "github.com/ethereum-optimism/optimism/op-service/signer"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -299,6 +302,11 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		big.NewFloat(params.GWei)).
 		Int(nil)
 
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(cfg.PrivateKey, "0x"))
+	if err != nil {
+		return Config{}, fmt.Errorf("could not parse config privateKey, %w", err)
+	}
+
 	return Config{
 		Backend:                   l1,
 		ResubmissionTimeout:       cfg.ResubmissionTimeout,
@@ -313,6 +321,7 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		SafeAbortNonceTooLowCount: cfg.SafeAbortNonceTooLowCount,
 		Signer:                    signerFactory(chainID),
 		From:                      from,
+		PrivateKey:                privateKey,
 	}, nil
 }
 
@@ -363,8 +372,9 @@ type Config struct {
 	SafeAbortNonceTooLowCount uint64
 
 	// Signer is used to sign transactions when the gas price is increased.
-	Signer opcrypto.SignerFn
-	From   common.Address
+	Signer     opcrypto.SignerFn
+	From       common.Address
+	PrivateKey *ecdsa.PrivateKey
 }
 
 func (m Config) Check() error {

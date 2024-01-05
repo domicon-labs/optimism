@@ -44,7 +44,7 @@ func (r *RollupClient) Version(ctx context.Context) (string, error) {
 	return output, err
 }
 
-func (r *RollupClient) SendDA(ctx context.Context, data interface{}) (common.Hash, error) {
+func (r *RollupClient) SendDA(ctx context.Context, data ...any) (common.Hash, error) {
 	var result common.Hash
 	err := r.rpc.CallContext(ctx, &result, "optimism_sendDA", data)
 	return result, err

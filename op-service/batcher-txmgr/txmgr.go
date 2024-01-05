@@ -2,6 +2,7 @@ package batcher_txmgr
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -11,10 +12,12 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-service/dial"
@@ -205,7 +208,7 @@ type CDInfo struct {
 	Len   *int
 	To    *common.Address
 	From  *common.Address
-	CM    []byte
+	CM    *common.Hash
 	Sig   []byte
 	Data  []byte
 }
@@ -217,15 +220,28 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 		From: &m.cfg.From,
 		Data: candidate.TxData,
 	}
-	// todo load index
+	err := m.loadNextIndex(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load next index: %w", err)
+	}
 	rawCD.Index = m.index
 	length := len(candidate.TxData)
 	rawCD.Len = &length
-	// todo compute cm
-	cm := []byte{}
-	rawCD.CM = cm
-	// todo
-	sig := []byte{}
+	cm := crypto.Keccak256Hash(candidate.TxData)
+	rawCD.CM = &cm
+
+	sigData := make([]byte, 8)
+	binary.BigEndian.PutUint64(sigData, *m.index)
+	lenBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(lenBytes, uint64(length))
+	sigData = append(sigData, lenBytes...)
+	sigData = append(sigData, cm.Bytes()...)
+	sigData = append(sigData, m.cfg.From.Bytes()...)
+	sigData = append(sigData, candidate.To.Bytes()...)
+	sig, err := crypto.Sign(sigData, m.cfg.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
+	}
 	rawCD.Sig = sig
 
 	m.l.Info("Creating CD", "to", rawCD.To, "from", m.cfg.From)
@@ -237,37 +253,47 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 // then subsequent calls simply increment this number. If the transaction manager
 // is reset, it will query the eth_getTransactionCount nonce again. If signing
 // fails, the nonce is not incremented.
-func (m *SimpleTxManager) signWithNextIndex(ctx context.Context, rawTx *types.DynamicFeeTx) (*types.Transaction, error) {
+func (m *SimpleTxManager) loadNextIndex(ctx context.Context) error {
 	m.indexLock.Lock()
 	defer m.indexLock.Unlock()
 
 	if m.index == nil {
-		// Fetch the sender's nonce from the latest known block (nil `blockNumber`)
+		contractAddress := common.HexToAddress("")
+		contractABI := ``
+		contractAbi, err := abi.JSON(strings.NewReader(contractABI))
+		if err != nil {
+			return fmt.Errorf("failed to decode contractABI: %w", err)
+		}
+
+		valueToDouble := big.NewInt(7)
+		data, err := contractAbi.Pack("method_name", valueToDouble)
+		if err != nil {
+			return fmt.Errorf("contractAbi pack filed: %w", err)
+		}
+
+		msg := ethereum.CallMsg{To: &contractAddress, Data: data}
+		//result, err := client.CallContract(context.Background(), msg, nil)
+
 		childCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
 		defer cancel()
-		//todo get index
-		nonce, err := m.backend.NonceAt(childCtx, m.cfg.From, nil)
+		_, err = m.backend.CallContract(childCtx, msg, nil)
 		if err != nil {
 			m.metr.RPCError()
-			return nil, fmt.Errorf("failed to get nonce: %w", err)
+			return fmt.Errorf("failed to get index: %w", err)
 		}
-		m.index = &nonce
+		var index big.Int
+		// err = contractAbi.Unpack(&index, "method_name", result)
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		i := index.Uint64()
+		m.index = &i
 	} else {
 		*m.index++
 	}
 
-	rawTx.Nonce = *m.index
-	ctx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
-	defer cancel()
-	tx, err := m.cfg.Signer(ctx, m.cfg.From, types.NewTx(rawTx))
-	if err != nil {
-		// decrement the nonce, so we can retry signing with the same nonce next time
-		// signWithNextNonce is called
-		*m.index--
-	} else {
-		m.metr.RecordNonce(*m.index)
-	}
-	return tx, err
+	m.metr.RecordNonce(*m.index)
+	return nil
 }
 
 // resetNonce resets the internal nonce tracking. This is called if any pending send
@@ -357,7 +383,8 @@ func (m *SimpleTxManager) publishTx(ctx context.Context, rawCD *CDInfo, sendStat
 			return rawCD, nil, false
 		}
 		cCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
-		hash, err := rollupClient.SendDA(cCtx, rawCD)
+		hash, err := rollupClient.SendDA(cCtx, rawCD.Index, rawCD.Len, rawCD.To, rawCD.From, rawCD.CM,
+			rawCD.Sig, rawCD.Data)
 		if err != nil {
 			cancel()
 			return rawCD, nil, false
