@@ -553,7 +553,7 @@ func TestTxMgrConfirmsMinGasPriceAfterBumping(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	receipt, err := h.mgr.sendTx(ctx, tx)
+	receipt, err := h.mgr.sendDA(ctx, tx)
 	require.Nil(t, err)
 	require.NotNil(t, receipt)
 	require.Equal(t, h.gasPricer.expGasFeeCap().Uint64(), receipt.GasUsed)
@@ -598,7 +598,7 @@ func TestTxMgrDoesntAbortNonceTooLowAfterMiningTx(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	receipt, err := h.mgr.sendTx(ctx, tx)
+	receipt, err := h.mgr.sendDA(ctx, tx)
 	require.Nil(t, err)
 	require.NotNil(t, receipt)
 	require.Equal(t, h.gasPricer.expGasFeeCap().Uint64(), receipt.GasUsed)

@@ -191,7 +191,7 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 }
 
 func (bs *BatcherService) initTxManager(cfg *CLIConfig) error {
-	txManager, err := txmgr.NewSimpleTxManager("batcher", bs.Log, bs.Metrics, cfg.TxMgrConfig)
+	txManager, err := txmgr.NewSimpleTxManager("batcher", bs.Log, bs.Metrics, bs.EndpointProvider, cfg.TxMgrConfig)
 	if err != nil {
 		return err
 	}
