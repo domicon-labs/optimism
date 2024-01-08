@@ -44,9 +44,11 @@ func (r *RollupClient) Version(ctx context.Context) (string, error) {
 	return output, err
 }
 
-func (r *RollupClient) SendDA(ctx context.Context, data ...any) (common.Hash, error) {
+func (r *RollupClient) SendDA(ctx context.Context, index, length uint64, broadcaster, user common.Address, commitment, sign, data hexutil.Bytes) (common.Hash, error) {
+	//log.Info("msg sendDA ", "index: ", index, " length:", length, " broadcaster:", broadcaster, " user:", user, " commitment:", commitment,
+	//	" sign: ", sign, " data:", data)
 	var result common.Hash
-	err := r.rpc.CallContext(ctx, &result, "optimism_sendDA", data)
+	err := r.rpc.CallContext(ctx, &result, "optimism_sendDA", index, length, broadcaster, user, commitment, sign, data)
 	return result, err
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -100,10 +101,10 @@ type SimpleTxManager struct {
 	name    string
 	chainID *big.Int
 
-	backend          ETHBackend
-	endpointProvider dial.L2EndpointProvider
-	l                log.Logger
-	metr             metrics.TxMetricer
+	backend       ETHBackend
+	domiconClient dial.RollupProvider
+	l             log.Logger
+	metr          metrics.TxMetricer
 
 	index     *uint64
 	indexLock sync.RWMutex
@@ -112,27 +113,27 @@ type SimpleTxManager struct {
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
-func NewSimpleTxManager(name string, l log.Logger, m metrics.TxMetricer, ep dial.L2EndpointProvider, cfg CLIConfig) (*SimpleTxManager, error) {
+func NewSimpleTxManager(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, cfg CLIConfig) (*SimpleTxManager, error) {
 	conf, err := NewConfig(cfg, l)
 	if err != nil {
 		return nil, err
 	}
-	return NewSimpleTxManagerFromConfig(name, l, m, ep, conf)
+	return NewSimpleTxManagerFromConfig(name, l, m, domiconClient, conf)
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
-func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetricer, ep dial.L2EndpointProvider, conf Config) (*SimpleTxManager, error) {
+func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, conf Config) (*SimpleTxManager, error) {
 	if err := conf.Check(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	return &SimpleTxManager{
-		chainID:          conf.ChainID,
-		name:             name,
-		cfg:              conf,
-		backend:          conf.Backend,
-		endpointProvider: ep,
-		l:                l.New("service", name),
-		metr:             m,
+		chainID:       conf.ChainID,
+		name:          name,
+		cfg:           conf,
+		backend:       conf.Backend,
+		domiconClient: domiconClient,
+		l:             l.New("service", name),
+		metr:          m,
 	}, nil
 }
 
@@ -203,11 +204,11 @@ func (m *SimpleTxManager) send(ctx context.Context, candidate TxCandidate) (*typ
 }
 
 type CDInfo struct {
-	Index *uint64
-	Len   *int
-	To    *common.Address
-	From  *common.Address
-	CM    *common.Hash
+	Index uint64
+	Len   uint64
+	To    common.Address
+	From  common.Address
+	CM    []byte
 	Sig   []byte
 	Data  []byte
 }
@@ -215,19 +216,19 @@ type CDInfo struct {
 // craftTx creates the signed transaction
 func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*CDInfo, error) {
 	rawCD := &CDInfo{
-		To:   candidate.To,
-		From: &m.cfg.From,
+		To:   *candidate.To,
+		From: m.cfg.From,
 		Data: candidate.TxData,
 	}
 	err := m.loadNextIndex(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load next index: %w", err)
 	}
-	rawCD.Index = m.index
+	rawCD.Index = *m.index
 	length := len(candidate.TxData)
-	rawCD.Len = &length
+	rawCD.Len = uint64(length)
 	cm := crypto.Keccak256Hash(candidate.TxData)
-	rawCD.CM = &cm
+	rawCD.CM = cm.Bytes()
 
 	sigData := make([]byte, 8)
 	binary.BigEndian.PutUint64(sigData, *m.index)
@@ -378,13 +379,13 @@ func (m *SimpleTxManager) publishTx(ctx context.Context, rawCD *CDInfo, sendStat
 			return rawCD, nil, false
 		}
 
-		rollupClient, err := m.endpointProvider.RollupClient(ctx)
+		rollupClient, err := m.domiconClient.RollupClient(ctx)
 		if err != nil {
 			return rawCD, nil, false
 		}
 		cCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
-		hash, err := rollupClient.SendDA(cCtx, rawCD.Index, rawCD.Len, rawCD.To, rawCD.From, rawCD.CM,
-			rawCD.Sig, rawCD.Data)
+		hash, err := rollupClient.SendDA(cCtx, rawCD.Index, rawCD.Len, rawCD.To, rawCD.From, hexutil.Bytes(rawCD.CM),
+			hexutil.Bytes(rawCD.Sig), hexutil.Bytes(rawCD.Data))
 		if err != nil {
 			cancel()
 			return rawCD, nil, false

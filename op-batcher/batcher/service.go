@@ -45,6 +45,7 @@ type BatcherService struct {
 	L1Client         *ethclient.Client
 	EndpointProvider dial.L2EndpointProvider
 	TxManager        txmgr.TxManager
+	DomiconClient    dial.RollupProvider
 
 	BatcherConfig
 
@@ -139,6 +140,12 @@ func (bs *BatcherService) initRPCClients(ctx context.Context, cfg *CLIConfig) er
 	}
 	bs.EndpointProvider = endpointProvider
 
+	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, bs.Log, "http://192.168.3.14:8547")
+	if err != nil {
+		return fmt.Errorf("failed to new domiconprovider: %w", err)
+	}
+	bs.DomiconClient = domiconClient
+
 	return nil
 }
 
@@ -191,7 +198,7 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 }
 
 func (bs *BatcherService) initTxManager(cfg *CLIConfig) error {
-	txManager, err := txmgr.NewSimpleTxManager("batcher", bs.Log, bs.Metrics, bs.EndpointProvider, cfg.TxMgrConfig)
+	txManager, err := txmgr.NewSimpleTxManager("batcher", bs.Log, bs.Metrics, bs.DomiconClient, cfg.TxMgrConfig)
 	if err != nil {
 		return err
 	}
@@ -337,6 +344,9 @@ func (bs *BatcherService) Stop(ctx context.Context) error {
 		bs.EndpointProvider.Close()
 	}
 
+	if bs.DomiconClient != nil {
+		bs.DomiconClient.Close()
+	}
 	if result == nil {
 		bs.stopped.Store(true)
 		bs.Log.Info("Batch Submitter stopped")
