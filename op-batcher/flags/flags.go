@@ -33,6 +33,11 @@ var (
 		Usage:   "HTTP provider URL for L2 execution engine. A comma-separated list enables the active L2 endpoint provider. Such a list needs to match the number of rollup-rpcs provided.",
 		EnvVars: prefixEnvVars("L2_ETH_RPC"),
 	}
+	DomiconRpcFlag = &cli.StringFlag{
+		Name:    "domicon-rpc",
+		Usage:   "HTTP provider URL for Domicon",
+		EnvVars: prefixEnvVars("DOMICON_RPC"),
+	}
 	RollupRpcFlag = &cli.StringFlag{
 		Name:    "rollup-rpc",
 		Usage:   "HTTP provider URL for Rollup node. A comma-separated list enables the active L2 endpoint provider. Such a list needs to match the number of l2-eth-rpcs provided.",
@@ -90,6 +95,7 @@ var requiredFlags = []cli.Flag{
 	L1EthRpcFlag,
 	L2EthRpcFlag,
 	RollupRpcFlag,
+	DomiconRpcFlag,
 }
 
 var optionalFlags = []cli.Flag{

@@ -27,6 +27,9 @@ type CLIConfig struct {
 	// RollupRpc is the HTTP provider URL for the L2 rollup node. A comma-separated list enables the active L2 provider. Such a list needs to match the number of L2EthRpcs provided.
 	RollupRpc string
 
+	// DomiconRpc is the HTTP provider URL for the domicon node.
+	DomiconRpc string
+
 	// MaxChannelDuration is the maximum duration (in #L1-blocks) to keep a
 	// channel open. This allows to more eagerly send batcher transactions
 	// during times of low L2 transaction volume. Note that the effective
@@ -72,6 +75,11 @@ func (c *CLIConfig) Check() error {
 	if c.L2EthRpc == "" {
 		return errors.New("empty L2 RPC URL")
 	}
+
+	if c.DomiconRpc == "" {
+		return errors.New("empty Domicon RPC URL")
+	}
+
 	if c.RollupRpc == "" {
 		return errors.New("empty rollup RPC URL")
 	}
@@ -109,6 +117,7 @@ func NewConfig(ctx *cli.Context) *CLIConfig {
 		/* Required Flags */
 		L1EthRpc:        ctx.String(flags.L1EthRpcFlag.Name),
 		L2EthRpc:        ctx.String(flags.L2EthRpcFlag.Name),
+		DomiconRpc:      ctx.String(flags.DomiconRpcFlag.Name),
 		RollupRpc:       ctx.String(flags.RollupRpcFlag.Name),
 		SubSafetyMargin: ctx.Uint64(flags.SubSafetyMarginFlag.Name),
 		PollInterval:    ctx.Duration(flags.PollIntervalFlag.Name),

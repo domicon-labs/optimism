@@ -140,7 +140,8 @@ func (bs *BatcherService) initRPCClients(ctx context.Context, cfg *CLIConfig) er
 	}
 	bs.EndpointProvider = endpointProvider
 
-	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, bs.Log, "http://192.168.3.14:8547")
+	log.Info("config", "domicon rpc", cfg.DomiconRpc)
+	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, bs.Log, cfg.DomiconRpc)
 	if err != nil {
 		return fmt.Errorf("failed to new domiconprovider: %w", err)
 	}
