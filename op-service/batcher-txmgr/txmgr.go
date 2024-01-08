@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
@@ -238,7 +237,8 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 	sigData = append(sigData, cm.Bytes()...)
 	sigData = append(sigData, m.cfg.From.Bytes()...)
 	sigData = append(sigData, candidate.To.Bytes()...)
-	sig, err := crypto.Sign(sigData, m.cfg.PrivateKey)
+	digestHash := crypto.Keccak256Hash(sigData)
+	sig, err := crypto.Sign(digestHash[:], m.cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
@@ -258,35 +258,35 @@ func (m *SimpleTxManager) loadNextIndex(ctx context.Context) error {
 	defer m.indexLock.Unlock()
 
 	if m.index == nil {
-		contractAddress := common.HexToAddress("")
-		contractABI := ``
-		contractAbi, err := abi.JSON(strings.NewReader(contractABI))
-		if err != nil {
-			return fmt.Errorf("failed to decode contractABI: %w", err)
-		}
-
-		valueToDouble := big.NewInt(7)
-		data, err := contractAbi.Pack("method_name", valueToDouble)
-		if err != nil {
-			return fmt.Errorf("contractAbi pack filed: %w", err)
-		}
-
-		msg := ethereum.CallMsg{To: &contractAddress, Data: data}
-		//result, err := client.CallContract(context.Background(), msg, nil)
-
-		childCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
-		defer cancel()
-		_, err = m.backend.CallContract(childCtx, msg, nil)
-		if err != nil {
-			m.metr.RPCError()
-			return fmt.Errorf("failed to get index: %w", err)
-		}
-		var index big.Int
-		// err = contractAbi.Unpack(&index, "method_name", result)
+		// contractAddress := common.HexToAddress("")
+		// contractABI := ``
+		// contractAbi, err := abi.JSON(strings.NewReader(contractABI))
 		// if err != nil {
-		// 	log.Fatal(err)
+		// 	return fmt.Errorf("failed to decode contractABI: %w", err)
 		// }
-		i := index.Uint64()
+
+		// valueToDouble := big.NewInt(7)
+		// data, err := contractAbi.Pack("method_name", valueToDouble)
+		// if err != nil {
+		// 	return fmt.Errorf("contractAbi pack filed: %w", err)
+		// }
+
+		// msg := ethereum.CallMsg{To: &contractAddress, Data: data}
+		// childCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
+		// defer cancel()
+		// _, err = m.backend.CallContract(childCtx, msg, nil)
+		// if err != nil {
+		// 	m.metr.RPCError()
+		// 	return fmt.Errorf("failed to get index: %w", err)
+		// }
+		// var index big.Int
+		// // err = contractAbi.Unpack(&index, "method_name", result)
+		// // if err != nil {
+		// // 	log.Fatal(err)
+		// // }
+		// i := index.Uint64()
+		// m.index = &i
+		var i uint64 = 1
 		m.index = &i
 	} else {
 		*m.index++
