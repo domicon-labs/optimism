@@ -47,7 +47,7 @@ func (r *RollupClient) Version(ctx context.Context) (string, error) {
 func (r *RollupClient) SendDA(ctx context.Context, index, length uint64, broadcaster, user common.Address, commitment, sign, data hexutil.Bytes) (common.Hash, error) {
 	//log.Info("msg sendDA ", "index: ", index, " length:", length, " broadcaster:", broadcaster, " user:", user, " commitment:", commitment,
 	//	" sign: ", sign, " data:", data)
-	log.Info("msg sendDA index: ", index,
+	log.Info("msg sendDA index: ", index)
 	log.Info("msg sendDA length:", length)
 	log.Info("msg sendDA broadcaster:", broadcaster)
 	log.Info("msg sendDA user:", user)
