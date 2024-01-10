@@ -12,17 +12,21 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr/metrics"
+	domiconabi "github.com/ethereum-optimism/optimism/packages/domicon-abi"
 )
 
 const (
@@ -110,6 +114,8 @@ type SimpleTxManager struct {
 	indexLock sync.RWMutex
 
 	pending atomic.Int64
+
+	l1DomiconCommitmentContract *bind.BoundContract
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
@@ -126,14 +132,27 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 	if err := conf.Check(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+
+	contractAddr := common.HexToAddress("0x8b35458F80f27c67003f74D344f083D8503c4C70")
+	contractAbi, err := abi.JSON(strings.NewReader(domiconabi.L1DomiconCommitment))
+	if err != nil {
+		return nil, fmt.Errorf("parse L1DomiconCommitment abi failed: %w", err)
+	}
+	client, ok := conf.Backend.(*ethclient.Client)
+	if !ok {
+		return nil, fmt.Errorf("convert ethclient failed: %w", err)
+	}
+	contract := bind.NewBoundContract(contractAddr, contractAbi, client, client, nil)
+
 	return &SimpleTxManager{
-		chainID:       conf.ChainID,
-		name:          name,
-		cfg:           conf,
-		backend:       conf.Backend,
-		domiconClient: domiconClient,
-		l:             l.New("service", name),
-		metr:          m,
+		chainID:                     conf.ChainID,
+		name:                        name,
+		cfg:                         conf,
+		backend:                     conf.Backend,
+		domiconClient:               domiconClient,
+		l:                           l.New("service", name),
+		metr:                        m,
+		l1DomiconCommitmentContract: contract,
 	}, nil
 }
 
@@ -220,7 +239,7 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 		From: m.cfg.From,
 		Data: candidate.TxData,
 	}
-	err := m.loadNextIndex(ctx)
+	err := m.loadNextIndex(ctx, m.cfg.From)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load next index: %w", err)
 	}
@@ -254,41 +273,22 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 // then subsequent calls simply increment this number. If the transaction manager
 // is reset, it will query the eth_getTransactionCount nonce again. If signing
 // fails, the nonce is not incremented.
-func (m *SimpleTxManager) loadNextIndex(ctx context.Context) error {
+func (m *SimpleTxManager) loadNextIndex(ctx context.Context, userAddr common.Address) error {
 	m.indexLock.Lock()
 	defer m.indexLock.Unlock()
 
 	if m.index == nil {
-		// contractAddress := common.HexToAddress("")
-		// contractABI := ``
-		// contractAbi, err := abi.JSON(strings.NewReader(contractABI))
-		// if err != nil {
-		// 	return fmt.Errorf("failed to decode contractABI: %w", err)
-		// }
-
-		// valueToDouble := big.NewInt(7)
-		// data, err := contractAbi.Pack("method_name", valueToDouble)
-		// if err != nil {
-		// 	return fmt.Errorf("contractAbi pack filed: %w", err)
-		// }
-
-		// msg := ethereum.CallMsg{To: &contractAddress, Data: data}
-		// childCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
-		// defer cancel()
-		// _, err = m.backend.CallContract(childCtx, msg, nil)
-		// if err != nil {
-		// 	m.metr.RPCError()
-		// 	return fmt.Errorf("failed to get index: %w", err)
-		// }
-		// var index big.Int
-		// // err = contractAbi.Unpack(&index, "method_name", result)
-		// // if err != nil {
-		// // 	log.Fatal(err)
-		// // }
-		// i := index.Uint64()
-		// m.index = &i
-		var i uint64 = 1
-		m.index = &i
+		results := new([]interface{})
+		err := m.l1DomiconCommitmentContract.Call(&bind.CallOpts{}, results, "indices", userAddr)
+		if err != nil {
+			return fmt.Errorf("call failed: %w", err)
+		}
+		index := *abi.ConvertType((*results)[0], new(big.Int)).(*big.Int)
+		if !index.IsUint64() {
+			return fmt.Errorf("index is not uint64: %w", err)
+		}
+		tmpIndex := index.Uint64()
+		m.index = &tmpIndex
 	} else {
 		*m.index++
 	}
