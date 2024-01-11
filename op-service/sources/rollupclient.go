@@ -50,7 +50,7 @@ func (r *RollupClient) SendDA(ctx context.Context, index, length uint64, broadca
 	log.Info("msg sendDA", "broadcaster", broadcaster)
 	log.Info("msg sendDA", "user", user)
 	var result common.Hash
-	err := r.rpc.CallContext(ctx, &result, "optimism_sendDA", index, length, broadcaster, user, commitment, sign, data)
+	err := r.rpc.CallContext(ctx, &result, "optimism_sendDA", index, length, 0, broadcaster, user, commitment, sign, data)
 	return result, err
 }
 

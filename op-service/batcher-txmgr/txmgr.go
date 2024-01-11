@@ -133,7 +133,7 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	contractAddr := common.HexToAddress("0x8b35458F80f27c67003f74D344f083D8503c4C70")
+	contractAddr := common.HexToAddress("0x46304c7f770f6Ee2D615F3f76722E5B1E325e7E2")
 	contractAbi, err := abi.JSON(strings.NewReader(domiconabi.L1DomiconCommitment))
 	if err != nil {
 		return nil, fmt.Errorf("parse L1DomiconCommitment abi failed: %w", err)
