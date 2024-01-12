@@ -2,7 +2,6 @@ package batcher_txmgr
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -19,10 +18,10 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
+	kzgsdk "github.com/domicon-labs/kzg-sdk"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr/metrics"
@@ -32,6 +31,7 @@ import (
 const (
 	// Geth requires a minimum fee bump of 10% for tx resubmission
 	priceBump int64 = 10
+	dSrsSize        = 1 << 16
 )
 
 // new = old * (100 + priceBump) / 100
@@ -116,6 +116,7 @@ type SimpleTxManager struct {
 	pending atomic.Int64
 
 	l1DomiconCommitmentContract *bind.BoundContract
+	domiconSdk                  *kzgsdk.DomiconSdk
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
@@ -144,6 +145,7 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 	}
 	contract := bind.NewBoundContract(contractAddr, contractAbi, client, client, nil)
 
+	domSdk, err := kzgsdk.InitDomiconSdk(dSrsSize, "")
 	return &SimpleTxManager{
 		chainID:                     conf.ChainID,
 		name:                        name,
@@ -153,6 +155,7 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 		l:                           l.New("service", name),
 		metr:                        m,
 		l1DomiconCommitmentContract: contract,
+		domiconSdk:                  domSdk,
 	}, nil
 }
 
@@ -227,7 +230,7 @@ type CDInfo struct {
 	Len   uint64
 	To    common.Address
 	From  common.Address
-	CM    []byte
+	CM    [48]byte
 	Sig   []byte
 	Data  []byte
 }
@@ -246,23 +249,32 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 	rawCD.Index = *m.index
 	length := len(candidate.TxData)
 	rawCD.Len = uint64(length)
-	cm := crypto.Keccak256Hash(candidate.TxData)
-	rawCD.CM = cm.Bytes()
+	digest, err := m.domiconSdk.GenerateDataCommit(candidate.TxData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate data commit: %w", err)
+	}
+	rawCD.CM = digest.Bytes()
 
-	sigData := make([]byte, 8)
-	binary.BigEndian.PutUint64(sigData, *m.index)
-	lenBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(lenBytes, uint64(length))
-	sigData = append(sigData, lenBytes...)
-	sigData = append(sigData, cm.Bytes()...)
-	sigData = append(sigData, m.cfg.From.Bytes()...)
-	sigData = append(sigData, candidate.To.Bytes()...)
-	digestHash := crypto.Keccak256Hash(sigData)
-	sig, err := crypto.Sign(digestHash[:], m.cfg.PrivateKey)
+	// sigData := make([]byte, 8)
+	// binary.BigEndian.PutUint64(sigData, *m.index)
+	// lenBytes := make([]byte, 8)
+	// binary.BigEndian.PutUint64(lenBytes, uint64(length))
+	// sigData = append(sigData, lenBytes...)
+	// //sigData = append(sigData, cm.Bytes()...)
+	// sigData = append(sigData, m.cfg.From.Bytes()...)
+	// sigData = append(sigData, candidate.To.Bytes()...)
+	// digestHash := crypto.Keccak256Hash(sigData)
+	// sig, err := crypto.Sign(digestHash[:], m.cfg.PrivateKey)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to sign commitment data : %w", err)
+	// }
+
+	singer := kzgsdk.NewEIP155FdSigner(big.NewInt(18))
+	_, sigData, err := kzgsdk.SignFd(m.cfg.From, *candidate.To, 0, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
-	rawCD.Sig = sig
+	rawCD.Sig = sigData
 
 	m.l.Info("Creating CD", "to", rawCD.To, "from", m.cfg.From)
 	return rawCD, nil
@@ -384,7 +396,7 @@ func (m *SimpleTxManager) publishTx(ctx context.Context, rawCD *CDInfo, sendStat
 			return rawCD, nil, false
 		}
 		cCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
-		hash, err := rollupClient.SendDA(cCtx, rawCD.Index, rawCD.Len, rawCD.To, rawCD.From, hexutil.Bytes(rawCD.CM),
+		hash, err := rollupClient.SendDA(cCtx, rawCD.Index, rawCD.Len, rawCD.To, rawCD.From, hexutil.Bytes(rawCD.CM[:]),
 			hexutil.Bytes(rawCD.Sig), hexutil.Bytes(rawCD.Data))
 		if err != nil {
 			cancel()
