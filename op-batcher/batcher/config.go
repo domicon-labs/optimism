@@ -49,6 +49,9 @@ type CLIConfig struct {
 	// and creating a new batch.
 	PollInterval time.Duration
 
+	// KzgSRSFlag is the path to kzg srs file
+	KzgSRSFlag string
+
 	// MaxPendingTransactions is the maximum number of concurrent pending
 	// transactions sent to the transaction manager (0 == no limit).
 	MaxPendingTransactions uint64
@@ -121,6 +124,7 @@ func NewConfig(ctx *cli.Context) *CLIConfig {
 		RollupRpc:       ctx.String(flags.RollupRpcFlag.Name),
 		SubSafetyMargin: ctx.Uint64(flags.SubSafetyMarginFlag.Name),
 		PollInterval:    ctx.Duration(flags.PollIntervalFlag.Name),
+		KzgSRSFlag:      ctx.String(flags.KzgSRSFlag.Name),
 
 		/* Optional Flags */
 		MaxPendingTransactions: ctx.Uint64(flags.MaxPendingTransactionsFlag.Name),

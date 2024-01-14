@@ -120,16 +120,16 @@ type SimpleTxManager struct {
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
-func NewSimpleTxManager(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, cfg CLIConfig) (*SimpleTxManager, error) {
+func NewSimpleTxManager(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, cfg CLIConfig, kzgSrsPath string) (*SimpleTxManager, error) {
 	conf, err := NewConfig(cfg, l)
 	if err != nil {
 		return nil, err
 	}
-	return NewSimpleTxManagerFromConfig(name, l, m, domiconClient, conf)
+	return NewSimpleTxManagerFromConfig(name, l, m, domiconClient, conf, kzgSrsPath)
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
-func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, conf Config) (*SimpleTxManager, error) {
+func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, conf Config, kzgSrsPath string) (*SimpleTxManager, error) {
 	if err := conf.Check(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -145,7 +145,10 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 	}
 	contract := bind.NewBoundContract(contractAddr, contractAbi, client, client, nil)
 
-	domSdk, err := kzgsdk.InitDomiconSdk(dSrsSize, "")
+	domSdk, err := kzgsdk.InitDomiconSdk(dSrsSize, kzgSrsPath)
+	if err != nil {
+		return nil, fmt.Errorf("init domicon sdk failed: %w", err)
+	}
 	return &SimpleTxManager{
 		chainID:                     conf.ChainID,
 		name:                        name,
@@ -270,7 +273,7 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 	// }
 
 	singer := kzgsdk.NewEIP155FdSigner(big.NewInt(18))
-	_, sigData, err := kzgsdk.SignFd(m.cfg.From, *candidate.To, 0, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
+	_, sigData, err := kzgsdk.SignFd(*candidate.To, m.cfg.From, 0, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
@@ -331,11 +334,13 @@ func (m *SimpleTxManager) sendTx(ctx context.Context, rawCD *CDInfo) (*types.Rec
 		wg.Add(1)
 		rawCD, hash, published := m.publishTx(ctx, rawCD, sendState)
 		if published {
+			log.Info("publish success", "hash", hash)
 			go func() {
 				defer wg.Done()
 				m.waitForTx(ctx, *hash, sendState, receiptChan)
 			}()
 		} else {
+			log.Info("publish failed", "hash", hash)
 			wg.Done()
 		}
 		return rawCD
