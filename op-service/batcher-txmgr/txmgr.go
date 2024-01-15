@@ -134,7 +134,7 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	contractAddr := common.HexToAddress("0x46304c7f770f6Ee2D615F3f76722E5B1E325e7E2")
+	contractAddr := common.HexToAddress("0x2532d1f1300c73efae136407e70c5b606ca3fe13")
 	contractAbi, err := abi.JSON(strings.NewReader(domiconabi.L1DomiconCommitment))
 	if err != nil {
 		return nil, fmt.Errorf("parse L1DomiconCommitment abi failed: %w", err)
@@ -257,23 +257,8 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 		return nil, fmt.Errorf("failed to generate data commit: %w", err)
 	}
 	rawCD.CM = digest.Bytes()
-
-	// sigData := make([]byte, 8)
-	// binary.BigEndian.PutUint64(sigData, *m.index)
-	// lenBytes := make([]byte, 8)
-	// binary.BigEndian.PutUint64(lenBytes, uint64(length))
-	// sigData = append(sigData, lenBytes...)
-	// //sigData = append(sigData, cm.Bytes()...)
-	// sigData = append(sigData, m.cfg.From.Bytes()...)
-	// sigData = append(sigData, candidate.To.Bytes()...)
-	// digestHash := crypto.Keccak256Hash(sigData)
-	// sig, err := crypto.Sign(digestHash[:], m.cfg.PrivateKey)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to sign commitment data : %w", err)
-	// }
-
-	singer := kzgsdk.NewEIP155FdSigner(big.NewInt(18))
-	_, sigData, err := kzgsdk.SignFd(*candidate.To, m.cfg.From, 0, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
+	singer := kzgsdk.NewEIP155FdSigner(big.NewInt(5))
+	_, sigData, err := kzgsdk.SignFd(m.cfg.From, *candidate.To, 5, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
