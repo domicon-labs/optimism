@@ -136,3 +136,27 @@ It's strongly recommended to avoid merging PRs into develop during an active rel
 ## License
 
 All other files within this repository are licensed under the [MIT License](https://github.com/ethereum-optimism/optimism/blob/master/LICENSE) unless stated otherwise.
+
+## DOMICON BATCHER
+```
+./bin/op-batcher \
+    --l2-eth-rpc=http://localhost:8545 \
+    --rollup-rpc=http://localhost:8547 \
+    --poll-interval=1s \
+    --sub-safety-margin=6 \
+    --num-confirmations=1 \
+    --safe-abort-nonce-too-low-count=3 \
+    --resubmission-timeout=30s \
+    --rpc.addr=0.0.0.0 \
+    --rpc.port=8548 \
+    --rpc.enable-admin \
+    --max-channel-duration=1 \
+    --l1-eth-rpc=https://eth-goerli.g.alchemy.com/v2/3EmrgXRDYmbuz3CwzOrl8lqTR6s8pKSR \
+    --private-key=0xa3f0f4f282e942887670f06bdaa905f102b86d7f01e62b0a1402891ee75ca6fb \
+    --domicon-node-rpc=http://13.251.128.247:8547 \
+    --domicon-node-addr="0x84e6e65663117A2Fc12bAac9c4c1Ee406b6090Be
+" \
+    --l1-domicon-nodes-contract="0x5724b13d1595502C5181BB3298878d3bA022551E" \
+    --network-timeout="40s" \
+    --kzg-srs=./bin/srs \
+```

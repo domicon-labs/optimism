@@ -27,8 +27,11 @@ type CLIConfig struct {
 	// RollupRpc is the HTTP provider URL for the L2 rollup node. A comma-separated list enables the active L2 provider. Such a list needs to match the number of L2EthRpcs provided.
 	RollupRpc string
 
-	// DomiconRpc is the HTTP provider URL for the domicon node.
-	DomiconRpc string
+	// DomiconNodeRpc is the HTTP provider URL for the domicon node.
+	DomiconNodeRpc string
+
+	//DomiconNodeAddr is the address of the domicon node
+	DomiconNodeAddr string
 
 	// MaxChannelDuration is the maximum duration (in #L1-blocks) to keep a
 	// channel open. This allows to more eagerly send batcher transactions
@@ -66,6 +69,9 @@ type CLIConfig struct {
 
 	BatchType uint
 
+	// L1DomiconNodesContractAddr is the address of L1DomiconNodesContract
+	L1DomiconNodesContractAddr string
+
 	TxMgrConfig      txmgr.CLIConfig
 	LogConfig        oplog.CLIConfig
 	MetricsConfig    opmetrics.CLIConfig
@@ -82,7 +88,7 @@ func (c *CLIConfig) Check() error {
 		return errors.New("empty L2 RPC URL")
 	}
 
-	if c.DomiconRpc == "" {
+	if c.DomiconNodeRpc == "" {
 		return errors.New("empty Domicon RPC URL")
 	}
 
@@ -121,14 +127,16 @@ func (c *CLIConfig) Check() error {
 func NewConfig(ctx *cli.Context) *CLIConfig {
 	return &CLIConfig{
 		/* Required Flags */
-		L1EthRpc:           ctx.String(flags.L1EthRpcFlag.Name),
-		L2EthRpc:           ctx.String(flags.L2EthRpcFlag.Name),
-		DomiconRpc:         ctx.String(flags.DomiconRpcFlag.Name),
-		RollupRpc:          ctx.String(flags.RollupRpcFlag.Name),
-		SubSafetyMargin:    ctx.Uint64(flags.SubSafetyMarginFlag.Name),
-		PollInterval:       ctx.Duration(flags.PollIntervalFlag.Name),
-		KzgSRSFlag:         ctx.String(flags.KzgSRSFlag.Name),
-		CommitContractAddr: ctx.String(flags.L1DomiconCommitmentContract.Name),
+		L1EthRpc:                   ctx.String(flags.L1EthRpcFlag.Name),
+		L2EthRpc:                   ctx.String(flags.L2EthRpcFlag.Name),
+		DomiconNodeRpc:             ctx.String(flags.DomiconNodeRpcFlag.Name),
+		DomiconNodeAddr:            ctx.String(flags.DomiconNodeAddrFlag.Name),
+		RollupRpc:                  ctx.String(flags.RollupRpcFlag.Name),
+		SubSafetyMargin:            ctx.Uint64(flags.SubSafetyMarginFlag.Name),
+		PollInterval:               ctx.Duration(flags.PollIntervalFlag.Name),
+		KzgSRSFlag:                 ctx.String(flags.KzgSRSFlag.Name),
+		CommitContractAddr:         ctx.String(flags.L1DomiconCommitmentContract.Name),
+		L1DomiconNodesContractAddr: ctx.String(flags.L1DomiconNodesContract.Name),
 
 		/* Optional Flags */
 		MaxPendingTransactions: ctx.Uint64(flags.MaxPendingTransactionsFlag.Name),

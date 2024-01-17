@@ -12,6 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -25,6 +28,7 @@ import (
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
+	domiconabi "github.com/ethereum-optimism/optimism/packages/domicon-abi"
 )
 
 var (
@@ -66,7 +70,8 @@ type BatcherService struct {
 
 	stopped atomic.Bool
 
-	NotSubmittingOnStart bool
+	NotSubmittingOnStart     bool
+	DomiconBroadcastNodeAddr *common.Address
 }
 
 // BatcherServiceFromCLIConfig creates a new BatcherService from a CLIConfig.
@@ -139,13 +144,32 @@ func (bs *BatcherService) initRPCClients(ctx context.Context, cfg *CLIConfig) er
 		return fmt.Errorf("failed to build L2 endpoint provider: %w", err)
 	}
 	bs.EndpointProvider = endpointProvider
-
-	log.Info("config", "domicon rpc", cfg.DomiconRpc)
-	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, bs.Log, cfg.DomiconRpc)
+	var bestNodeRpc string
+	var bestNodeAddr common.Address
+	if len(strings.TrimSpace(cfg.DomiconNodeRpc)) == 0 || len(strings.TrimSpace(cfg.DomiconNodeAddr)) == 0 {
+		// get broadcast node from l1DomiconNodes contract
+		log.Info("there is no specifed rollup rpc url, batcher will get rpc url from l1DomiconNodes contract")
+		domiconNodesAbi, err := abi.JSON(strings.NewReader(domiconabi.DomiconNodes))
+		if err != nil {
+			return fmt.Errorf("parse DomiconNodes abi failed: %w", err)
+		}
+		l1DomiconNodesContractAddr := common.HexToAddress(cfg.L1DomiconNodesContractAddr)
+		domiconNodesContract := bind.NewBoundContract(l1DomiconNodesContractAddr, domiconNodesAbi, l1Client, l1Client, nil)
+		bestNodeRpc, bestNodeAddr, err = selectBestNode(domiconNodesContract)
+		if err != nil {
+			return fmt.Errorf("selectBestNode failed: %w", err)
+		}
+	} else {
+		bestNodeRpc = strings.TrimSpace(cfg.DomiconNodeRpc)
+		bestNodeAddr = common.HexToAddress(strings.TrimSpace(cfg.DomiconNodeAddr))
+	}
+	log.Info("domicon broadcast node", "node rpc", bestNodeRpc, "node addr", bestNodeAddr)
+	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, bs.Log, bestNodeRpc)
 	if err != nil {
 		return fmt.Errorf("failed to new domiconprovider: %w", err)
 	}
 	bs.DomiconClient = domiconClient
+	bs.DomiconBroadcastNodeAddr = &bestNodeAddr
 
 	return nil
 }
@@ -242,14 +266,15 @@ func (bs *BatcherService) initMetricsServer(cfg *CLIConfig) error {
 
 func (bs *BatcherService) initDriver() {
 	bs.driver = NewBatchSubmitter(DriverSetup{
-		Log:              bs.Log,
-		Metr:             bs.Metrics,
-		RollupConfig:     bs.RollupConfig,
-		Config:           bs.BatcherConfig,
-		Txmgr:            bs.TxManager,
-		L1Client:         bs.L1Client,
-		EndpointProvider: bs.EndpointProvider,
-		ChannelConfig:    bs.ChannelConfig,
+		Log:                      bs.Log,
+		Metr:                     bs.Metrics,
+		RollupConfig:             bs.RollupConfig,
+		Config:                   bs.BatcherConfig,
+		Txmgr:                    bs.TxManager,
+		L1Client:                 bs.L1Client,
+		EndpointProvider:         bs.EndpointProvider,
+		ChannelConfig:            bs.ChannelConfig,
+		DomiconBroadcastNodeAddr: bs.DomiconBroadcastNodeAddr,
 	})
 }
 
@@ -361,4 +386,10 @@ var _ cliapp.Lifecycle = (*BatcherService)(nil)
 // to start/stop/restart the batch-submission work, for use in testing.
 func (bs *BatcherService) Driver() rpc.BatcherDriver {
 	return bs.driver
+}
+
+func selectBestNode(l1DomiconNodesContract *bind.BoundContract) (string, common.Address, error) {
+	// todo
+
+	return "", common.HexToAddress(""), nil
 }

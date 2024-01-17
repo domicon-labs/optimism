@@ -134,13 +134,14 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
+	client, ok := conf.Backend.(*ethclient.Client)
+	if !ok {
+		return nil, fmt.Errorf("convert ethclient failed")
+	}
+
 	contractAbi, err := abi.JSON(strings.NewReader(domiconabi.L1DomiconCommitment))
 	if err != nil {
 		return nil, fmt.Errorf("parse L1DomiconCommitment abi failed: %w", err)
-	}
-	client, ok := conf.Backend.(*ethclient.Client)
-	if !ok {
-		return nil, fmt.Errorf("convert ethclient failed: %w", err)
 	}
 	contract := bind.NewBoundContract(conf.L1DomiconCommitmentContractAddr, contractAbi, client, client, nil)
 

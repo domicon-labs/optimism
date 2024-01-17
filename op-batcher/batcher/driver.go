@@ -38,14 +38,15 @@ type RollupClient interface {
 
 // DriverSetup is the collection of input/output interfaces and configuration that the driver operates on.
 type DriverSetup struct {
-	Log              log.Logger
-	Metr             metrics.Metricer
-	RollupConfig     *rollup.Config
-	Config           BatcherConfig
-	Txmgr            txmgr.TxManager
-	L1Client         L1Client
-	EndpointProvider dial.L2EndpointProvider
-	ChannelConfig    ChannelConfig
+	Log                      log.Logger
+	Metr                     metrics.Metricer
+	RollupConfig             *rollup.Config
+	Config                   BatcherConfig
+	Txmgr                    txmgr.TxManager
+	L1Client                 L1Client
+	EndpointProvider         dial.L2EndpointProvider
+	ChannelConfig            ChannelConfig
+	DomiconBroadcastNodeAddr *common.Address
 }
 
 // BatchSubmitter encapsulates a service responsible for submitting L2 tx
@@ -360,9 +361,9 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txDat
 	// Do the gas estimation offline. A value of 0 will cause the [txmgr] to estimate the gas limit.
 	data := txdata.Bytes()
 
-	submitterAddr := common.HexToAddress("0x84e6e65663117A2Fc12bAac9c4c1Ee406b6090Be")
+	//submitterAddr := common.HexToAddress("0x84e6e65663117A2Fc12bAac9c4c1Ee406b6090Be")
 	candidate := txmgr.TxCandidate{
-		To:     &submitterAddr,
+		To:     l.DriverSetup.DomiconBroadcastNodeAddr,
 		TxData: data,
 	}
 	queue.Send(txdata, candidate, receiptsCh)

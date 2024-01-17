@@ -33,10 +33,15 @@ var (
 		Usage:   "HTTP provider URL for L2 execution engine. A comma-separated list enables the active L2 endpoint provider. Such a list needs to match the number of rollup-rpcs provided.",
 		EnvVars: prefixEnvVars("L2_ETH_RPC"),
 	}
-	DomiconRpcFlag = &cli.StringFlag{
-		Name:    "domicon-rpc",
+	DomiconNodeRpcFlag = &cli.StringFlag{
+		Name:    "domicon-node-rpc",
 		Usage:   "HTTP provider URL for Domicon",
-		EnvVars: prefixEnvVars("DOMICON_RPC"),
+		EnvVars: prefixEnvVars("DOMICON_NODE_RPC"),
+	}
+	DomiconNodeAddrFlag = &cli.StringFlag{
+		Name:    "domicon-node-addr",
+		Usage:   "address  for Domicon node",
+		EnvVars: prefixEnvVars("DOMICON_NODE_ADDR"),
 	}
 	KzgSRSFlag = &cli.StringFlag{
 		Name:    "kzg-srs",
@@ -47,6 +52,11 @@ var (
 		Name:    "l1-domicon-commitment-contract",
 		Usage:   "address to L1DomiconCommitmentContract",
 		EnvVars: prefixEnvVars("L1_DOMICON_COMMITMENT_CONTRACT"),
+	}
+	L1DomiconNodesContract = &cli.StringFlag{
+		Name:    "l1-domicon-nodes-contract",
+		Usage:   "address to L1DomiconNodesContract",
+		EnvVars: prefixEnvVars("L1_DOMICON_NODES_CONTRACT"),
 	}
 	RollupRpcFlag = &cli.StringFlag{
 		Name:    "rollup-rpc",
@@ -105,7 +115,6 @@ var requiredFlags = []cli.Flag{
 	L1EthRpcFlag,
 	L2EthRpcFlag,
 	RollupRpcFlag,
-	DomiconRpcFlag,
 	KzgSRSFlag,
 	L1DomiconCommitmentContract,
 }
