@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -359,8 +360,9 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txDat
 	// Do the gas estimation offline. A value of 0 will cause the [txmgr] to estimate the gas limit.
 	data := txdata.Bytes()
 
+	submitterAddr := common.HexToAddress("0x84e6e65663117A2Fc12bAac9c4c1Ee406b6090Be")
 	candidate := txmgr.TxCandidate{
-		To:     &l.RollupConfig.BatchInboxAddress,
+		To:     &submitterAddr,
 		TxData: data,
 	}
 	queue.Send(txdata, candidate, receiptsCh)

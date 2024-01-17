@@ -134,7 +134,7 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	contractAddr := common.HexToAddress("0x2532d1f1300c73efae136407e70c5b606ca3fe13")
+	contractAddr := common.HexToAddress("0x5724b13d1595502C5181BB3298878d3bA022551E")
 	contractAbi, err := abi.JSON(strings.NewReader(domiconabi.L1DomiconCommitment))
 	if err != nil {
 		return nil, fmt.Errorf("parse L1DomiconCommitment abi failed: %w", err)
@@ -258,10 +258,11 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 	}
 	rawCD.CM = digest.Bytes()
 	singer := kzgsdk.NewEIP155FdSigner(big.NewInt(5))
-	_, sigData, err := kzgsdk.SignFd(m.cfg.From, *candidate.To, 5, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
+	sigHash, sigData, err := kzgsdk.SignFd(m.cfg.From, rawCD.To, 5, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
+	log.Info("craftCD", "sigHash", sigHash)
 	rawCD.Sig = sigData
 
 	m.l.Info("Creating CD", "to", rawCD.To, "from", m.cfg.From)
