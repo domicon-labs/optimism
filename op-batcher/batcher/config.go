@@ -52,6 +52,9 @@ type CLIConfig struct {
 	// KzgSRSFlag is the path to kzg srs file
 	KzgSRSFlag string
 
+	// CommitContractAddr is the address of L1DomiconCommitmentContract (to get index)
+	CommitContractAddr string
+
 	// MaxPendingTransactions is the maximum number of concurrent pending
 	// transactions sent to the transaction manager (0 == no limit).
 	MaxPendingTransactions uint64
@@ -118,13 +121,14 @@ func (c *CLIConfig) Check() error {
 func NewConfig(ctx *cli.Context) *CLIConfig {
 	return &CLIConfig{
 		/* Required Flags */
-		L1EthRpc:        ctx.String(flags.L1EthRpcFlag.Name),
-		L2EthRpc:        ctx.String(flags.L2EthRpcFlag.Name),
-		DomiconRpc:      ctx.String(flags.DomiconRpcFlag.Name),
-		RollupRpc:       ctx.String(flags.RollupRpcFlag.Name),
-		SubSafetyMargin: ctx.Uint64(flags.SubSafetyMarginFlag.Name),
-		PollInterval:    ctx.Duration(flags.PollIntervalFlag.Name),
-		KzgSRSFlag:      ctx.String(flags.KzgSRSFlag.Name),
+		L1EthRpc:           ctx.String(flags.L1EthRpcFlag.Name),
+		L2EthRpc:           ctx.String(flags.L2EthRpcFlag.Name),
+		DomiconRpc:         ctx.String(flags.DomiconRpcFlag.Name),
+		RollupRpc:          ctx.String(flags.RollupRpcFlag.Name),
+		SubSafetyMargin:    ctx.Uint64(flags.SubSafetyMarginFlag.Name),
+		PollInterval:       ctx.Duration(flags.PollIntervalFlag.Name),
+		KzgSRSFlag:         ctx.String(flags.KzgSRSFlag.Name),
+		CommitContractAddr: ctx.String(flags.L1DomiconCommitmentContract.Name),
 
 		/* Optional Flags */
 		MaxPendingTransactions: ctx.Uint64(flags.MaxPendingTransactionsFlag.Name),

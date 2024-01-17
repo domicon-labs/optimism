@@ -260,7 +260,7 @@ func ReadCLIConfig(ctx *cli.Context) CLIConfig {
 	}
 }
 
-func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
+func NewConfig(cfg CLIConfig, l log.Logger, commitContractAddr string) (Config, error) {
 	if err := cfg.Check(); err != nil {
 		return Config{}, fmt.Errorf("invalid config: %w", err)
 	}
@@ -307,21 +307,23 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("could not parse config privateKey, %w", err)
 	}
 
+	contractAddr := common.HexToAddress(commitContractAddr)
 	return Config{
-		Backend:                   l1,
-		ResubmissionTimeout:       cfg.ResubmissionTimeout,
-		FeeLimitMultiplier:        cfg.FeeLimitMultiplier,
-		FeeLimitThreshold:         feeLimitThreshold,
-		ChainID:                   chainID,
-		TxSendTimeout:             cfg.TxSendTimeout,
-		TxNotInMempoolTimeout:     cfg.TxNotInMempoolTimeout,
-		NetworkTimeout:            cfg.NetworkTimeout,
-		ReceiptQueryInterval:      cfg.ReceiptQueryInterval,
-		NumConfirmations:          cfg.NumConfirmations,
-		SafeAbortNonceTooLowCount: cfg.SafeAbortNonceTooLowCount,
-		Signer:                    signerFactory(chainID),
-		From:                      from,
-		PrivateKey:                privateKey,
+		Backend:                         l1,
+		ResubmissionTimeout:             cfg.ResubmissionTimeout,
+		FeeLimitMultiplier:              cfg.FeeLimitMultiplier,
+		FeeLimitThreshold:               feeLimitThreshold,
+		ChainID:                         chainID,
+		TxSendTimeout:                   cfg.TxSendTimeout,
+		TxNotInMempoolTimeout:           cfg.TxNotInMempoolTimeout,
+		NetworkTimeout:                  cfg.NetworkTimeout,
+		ReceiptQueryInterval:            cfg.ReceiptQueryInterval,
+		NumConfirmations:                cfg.NumConfirmations,
+		SafeAbortNonceTooLowCount:       cfg.SafeAbortNonceTooLowCount,
+		Signer:                          signerFactory(chainID),
+		From:                            from,
+		PrivateKey:                      privateKey,
+		L1DomiconCommitmentContractAddr: contractAddr,
 	}, nil
 }
 
@@ -375,6 +377,8 @@ type Config struct {
 	Signer     opcrypto.SignerFn
 	From       common.Address
 	PrivateKey *ecdsa.PrivateKey
+
+	L1DomiconCommitmentContractAddr common.Address
 }
 
 func (m Config) Check() error {

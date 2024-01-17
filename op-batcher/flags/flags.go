@@ -43,6 +43,11 @@ var (
 		Usage:   "Path to kzg srs file",
 		EnvVars: prefixEnvVars("KZG_SRC"),
 	}
+	L1DomiconCommitmentContract = &cli.StringFlag{
+		Name:    "l1-domicon-commitment-contract",
+		Usage:   "address to L1DomiconCommitmentContract",
+		EnvVars: prefixEnvVars("L1_DOMICON_COMMITMENT_CONTRACT"),
+	}
 	RollupRpcFlag = &cli.StringFlag{
 		Name:    "rollup-rpc",
 		Usage:   "HTTP provider URL for Rollup node. A comma-separated list enables the active L2 endpoint provider. Such a list needs to match the number of l2-eth-rpcs provided.",
@@ -102,6 +107,7 @@ var requiredFlags = []cli.Flag{
 	RollupRpcFlag,
 	DomiconRpcFlag,
 	KzgSRSFlag,
+	L1DomiconCommitmentContract,
 }
 
 var optionalFlags = []cli.Flag{

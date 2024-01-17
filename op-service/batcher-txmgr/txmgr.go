@@ -120,8 +120,8 @@ type SimpleTxManager struct {
 }
 
 // NewSimpleTxManager initializes a new SimpleTxManager with the passed Config.
-func NewSimpleTxManager(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, cfg CLIConfig, kzgSrsPath string) (*SimpleTxManager, error) {
-	conf, err := NewConfig(cfg, l)
+func NewSimpleTxManager(name string, l log.Logger, m metrics.TxMetricer, domiconClient dial.RollupProvider, cfg CLIConfig, kzgSrsPath string, commitContractAddr string) (*SimpleTxManager, error) {
+	conf, err := NewConfig(cfg, l, commitContractAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,6 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	contractAddr := common.HexToAddress("0x5724b13d1595502C5181BB3298878d3bA022551E")
 	contractAbi, err := abi.JSON(strings.NewReader(domiconabi.L1DomiconCommitment))
 	if err != nil {
 		return nil, fmt.Errorf("parse L1DomiconCommitment abi failed: %w", err)
@@ -143,7 +142,7 @@ func NewSimpleTxManagerFromConfig(name string, l log.Logger, m metrics.TxMetrice
 	if !ok {
 		return nil, fmt.Errorf("convert ethclient failed: %w", err)
 	}
-	contract := bind.NewBoundContract(contractAddr, contractAbi, client, client, nil)
+	contract := bind.NewBoundContract(conf.L1DomiconCommitmentContractAddr, contractAbi, client, client, nil)
 
 	domSdk, err := kzgsdk.InitDomiconSdk(dSrsSize, kzgSrsPath)
 	if err != nil {
