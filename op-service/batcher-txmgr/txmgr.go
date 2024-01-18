@@ -263,6 +263,10 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
 	log.Info("craftCD", "sigHash", sigHash)
+	addr, err := kzgsdk.FdGetSender(singer, sigData, m.cfg.From, rawCD.To, 0, rawCD.Index, rawCD.Len, rawCD.CM[:])
+	if err != nil {
+		log.Info("FdGetSender", "err", err, "addr", addr)
+	}
 	rawCD.Sig = sigData
 
 	m.l.Info("Creating CD", "to", rawCD.To, "from", m.cfg.From)
@@ -326,7 +330,7 @@ func (m *SimpleTxManager) sendTx(ctx context.Context, rawCD *CDInfo) (*types.Rec
 				m.waitForTx(ctx, *hash, sendState, receiptChan)
 			}()
 		} else {
-			log.Info("publish failed", "hash", hash)
+			log.Info("publish failed")
 			wg.Done()
 		}
 		return rawCD
@@ -375,6 +379,14 @@ func (m *SimpleTxManager) publishTx(ctx context.Context, rawCD *CDInfo, sendStat
 
 	l.Info("Publishing transaction")
 
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+	rollupClient, err := m.domiconClient.RollupClient(ctxCancel)
+	if err != nil {
+		cancel()
+		return rawCD, nil, false
+	}
+
 	for {
 		if sendState.IsWaitingForConfirmation() {
 			// there is a chance the previous tx goes into "waiting for confirmation" state
@@ -382,17 +394,9 @@ func (m *SimpleTxManager) publishTx(ctx context.Context, rawCD *CDInfo, sendStat
 			return rawCD, nil, false
 		}
 
-		rollupClient, err := m.domiconClient.RollupClient(ctx)
-		if err != nil {
-			return rawCD, nil, false
-		}
 		cCtx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
 		hash, err := rollupClient.SendDA(cCtx, rawCD.Index, rawCD.Len, rawCD.To, rawCD.From, hexutil.Bytes(rawCD.CM[:]),
 			hexutil.Bytes(rawCD.Sig), hexutil.Bytes(rawCD.Data))
-		if err != nil {
-			cancel()
-			return rawCD, nil, false
-		}
 
 		cancel()
 		sendState.ProcessSendError(err)
@@ -472,6 +476,9 @@ func (m *SimpleTxManager) queryReceipt(ctx context.Context, txHash common.Hash, 
 	ctx, cancel := context.WithTimeout(ctx, m.cfg.NetworkTimeout)
 	defer cancel()
 	receipt, err := m.backend.TransactionReceipt(ctx, txHash)
+	if err != nil {
+		log.Info("TransactionReceipt", "err", err)
+	}
 	if errors.Is(err, ethereum.NotFound) {
 		sendState.TxNotMined(txHash)
 		m.l.Trace("Transaction not yet mined", "hash", txHash)
@@ -487,6 +494,7 @@ func (m *SimpleTxManager) queryReceipt(ctx context.Context, txHash common.Hash, 
 	}
 
 	// Receipt is confirmed to be valid from this point on
+	log.Info("TxMined")
 	sendState.TxMined(txHash)
 
 	txHeight := receipt.BlockNumber.Uint64()
