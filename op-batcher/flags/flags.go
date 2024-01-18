@@ -117,6 +117,9 @@ var requiredFlags = []cli.Flag{
 	RollupRpcFlag,
 	KzgSRSFlag,
 	L1DomiconCommitmentContract,
+	DomiconNodeRpcFlag,
+	DomiconNodeAddrFlag,
+	L1DomiconNodesContract,
 }
 
 var optionalFlags = []cli.Flag{
