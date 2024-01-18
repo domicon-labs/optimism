@@ -258,7 +258,7 @@ func (m *SimpleTxManager) craftCD(ctx context.Context, candidate TxCandidate) (*
 	}
 	rawCD.CM = digest.Bytes()
 	singer := kzgsdk.NewEIP155FdSigner(big.NewInt(11155111))
-	sigHash, sigData, err := kzgsdk.SignFd(m.cfg.From, rawCD.To, 5, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
+	sigHash, sigData, err := kzgsdk.SignFd(m.cfg.From, rawCD.To, 0, *m.index, uint64(length), rawCD.CM[:], singer, m.cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign commitment data : %w", err)
 	}
