@@ -157,6 +157,8 @@ github.com/domicon-labs/kzg-sdk v1.0.6 h1:RBedCrtmkGhMbV541eT92IqpGI1U7e6mWqawdm
 github.com/domicon-labs/kzg-sdk v1.0.6/go.mod h1:NUx3pZlonZSoSSfzQZ/d/jn19BFuHf5746iZLgF15XA=
 github.com/domicon-labs/kzg-sdk v1.0.9 h1:1K7idS6xOMXuDQgI3PteJHUbjo6goJAOI+B7W8eolc0=
 github.com/domicon-labs/kzg-sdk v1.0.9/go.mod h1:ANxSHbNoiSAS0MHEUrqPFXyySyBF+yR3yzWXDP7pBHs=
+github.com/domicon-labs/kzg-sdk v1.1.0 h1:ckh/4cJ0A14IXiRhrLuDiRzPGiUqfl2Ix+EaY7ftmmk=
+github.com/domicon-labs/kzg-sdk v1.1.0/go.mod h1:ANxSHbNoiSAS0MHEUrqPFXyySyBF+yR3yzWXDP7pBHs=
 github.com/dop251/goja v0.0.0-20211022113120-dc8c55024d06/go.mod h1:R9ET47fwRVRPZnOGvHxxhuZcbrMCuiqOz3Rlrh4KSnk=
 github.com/dop251/goja v0.0.0-20230806174421-c933cf95e127 h1:qwcF+vdFrvPSEUDSX5RVoRccG8a5DhOdWdQ4zN62zzo=
 github.com/dop251/goja v0.0.0-20230806174421-c933cf95e127/go.mod h1:QMWlm50DNe14hD7t24KEqZuUdC9sOTy8W6XbCU1mlw4=
