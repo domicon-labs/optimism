@@ -87,11 +87,6 @@ func (c *CLIConfig) Check() error {
 	if c.L2EthRpc == "" {
 		return errors.New("empty L2 RPC URL")
 	}
-
-	if c.DomiconNodeRpc == "" {
-		return errors.New("empty Domicon RPC URL")
-	}
-
 	if c.RollupRpc == "" {
 		return errors.New("empty rollup RPC URL")
 	}

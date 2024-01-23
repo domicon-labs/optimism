@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	_ "net/http/pprof"
 	"strconv"
 	"strings"
@@ -389,7 +390,86 @@ func (bs *BatcherService) Driver() rpc.BatcherDriver {
 }
 
 func selectBestNode(l1DomiconNodesContract *bind.BoundContract) (string, common.Address, error) {
-	// todo
+	// 1. get all node address
+	bcNodeAddrs := new([]interface{})
+	err := l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeAddrs, "BROADCAST_NODES")
+	if err != nil {
+		return "", common.HexToAddress(""), err
+	}
+	log.Info("selectBestNode", "addresses:", (*bcNodeAddrs)[0])
+	//fmt.Printf("type: %T", (*bcNodeAddrs)[0])
+	addrSli, ok := (*bcNodeAddrs)[0].([]common.Address)
+	if !ok {
+		return "", common.HexToAddress(""), errors.New("broadcast node address error format")
+	}
 
-	return "", common.HexToAddress(""), nil
+	// 2. ensure broadcast node
+	// 3. get all broadcast node rpc url
+	nodesAddrRpc := make(map[string]common.Address)
+
+	log.Info("msg", "addrSli", addrSli)
+	for i, addr := range addrSli {
+		if i > 20 {
+			break
+		}
+		log.Info("msg", "addr", addr)
+		bcNodeInfo := new([]interface{})
+		l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeInfo, "broadcastingNodes", addr)
+		fmt.Printf("type: %T\n", (*bcNodeInfo)[1])
+		nodeAddr, _ := (*bcNodeInfo)[0].(common.Address)
+		nodeRpc, _ := (*bcNodeInfo)[1].(string)
+		log.Info("bcNodeInfo", "nodeAddr", nodeAddr, "nodeRpc", nodeRpc)
+		nodesAddrRpc[nodeRpc] = nodeAddr
+	}
+	// 4. select one broadcast node which network state is best
+	ch := make(chan struct {
+		duration time.Duration
+		url      string
+	}, len(nodesAddrRpc))
+	for rpcUrl, _ := range nodesAddrRpc {
+		go testRPCLatency(rpcUrl, ch)
+	}
+	var fastestUrl string
+	var minDuration time.Duration = time.Minute * 5
+	for i := 0; i < len(nodesAddrRpc); i++ {
+		item := <-ch
+		if item.duration == time.Duration(0) {
+			continue
+		}
+		if item.duration < minDuration {
+			minDuration = item.duration
+			fastestUrl = item.url
+		}
+	}
+	// 5. return its rpc url and node address
+	return fastestUrl, nodesAddrRpc[fastestUrl], nil
+}
+
+func testRPCLatency(url string, ch chan<- struct {
+	duration time.Duration
+	url      string
+}) {
+	startTime := time.Now()
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Info("testRPCLatency", "url", url, "error", err)
+		ch <- struct {
+			duration time.Duration
+			url      string
+		}{
+			time.Duration(0),
+			url,
+		}
+		return
+	}
+	defer resp.Body.Close()
+	duration := time.Since(startTime)
+	log.Info("testRPCLatency", "url", url, "duration", duration)
+	ch <- struct {
+		duration time.Duration
+		url      string
+	}{
+		duration,
+		url,
+	}
 }
