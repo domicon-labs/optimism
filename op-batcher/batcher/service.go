@@ -397,7 +397,6 @@ func selectBestNode(l1DomiconNodesContract *bind.BoundContract) (string, common.
 		return "", common.HexToAddress(""), err
 	}
 	log.Info("selectBestNode", "addresses:", (*bcNodeAddrs)[0])
-	//fmt.Printf("type: %T", (*bcNodeAddrs)[0])
 	addrSli, ok := (*bcNodeAddrs)[0].([]common.Address)
 	if !ok {
 		return "", common.HexToAddress(""), errors.New("broadcast node address error format")
@@ -406,7 +405,6 @@ func selectBestNode(l1DomiconNodesContract *bind.BoundContract) (string, common.
 	// 2. ensure broadcast node
 	// 3. get all broadcast node rpc url
 	nodesAddrRpc := make(map[string]common.Address)
-
 	log.Info("msg", "addrSli", addrSli)
 	for i, addr := range addrSli {
 		if i > 20 {
@@ -415,7 +413,6 @@ func selectBestNode(l1DomiconNodesContract *bind.BoundContract) (string, common.
 		log.Info("msg", "addr", addr)
 		bcNodeInfo := new([]interface{})
 		l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeInfo, "broadcastingNodes", addr)
-		fmt.Printf("type: %T\n", (*bcNodeInfo)[1])
 		nodeAddr, _ := (*bcNodeInfo)[0].(common.Address)
 		nodeRpc, _ := (*bcNodeInfo)[1].(string)
 		log.Info("bcNodeInfo", "nodeAddr", nodeAddr, "nodeRpc", nodeRpc)
