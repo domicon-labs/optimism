@@ -18,5 +18,6 @@ type RollupClientInterface interface {
 	SendDA(ctx context.Context, index, length uint64, broadcaster, user common.Address, commitment, sign, data hexutil.Bytes) (common.Hash, error)
 	StartSequencer(ctx context.Context, unsafeHead common.Hash) error
 	SequencerActive(ctx context.Context) (bool, error)
+	FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error)
 	Close()
 }
