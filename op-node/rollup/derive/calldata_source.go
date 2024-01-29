@@ -5,19 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-	domiconabi "github.com/ethereum-optimism/optimism/packages/domicon-abi"
 )
 
 type DataIter interface {
@@ -28,22 +23,27 @@ type L1TransactionFetcher interface {
 	InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, types.Transactions, error)
 }
 
+type DomiconDAFetcher interface {
+	FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error)
+}
+
 // DataSourceFactory readers raw transactions from a given block & then filters for
 // batch submitter transactions.
 // This is not a stage in the pipeline, but a wrapper for another stage in the pipeline
 type DataSourceFactory struct {
-	log     log.Logger
-	dsCfg   DataSourceConfig
-	fetcher L1TransactionFetcher
+	log              log.Logger
+	dsCfg            DataSourceConfig
+	fetcher          L1TransactionFetcher
+	domiconDAFetcher DomiconDAFetcher
 }
 
-func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1TransactionFetcher) *DataSourceFactory {
-	return &DataSourceFactory{log: log, dsCfg: DataSourceConfig{l1Signer: cfg.L1Signer(), batchInboxAddress: cfg.BatchInboxAddress}, fetcher: fetcher}
+func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1TransactionFetcher, daFetcher DomiconDAFetcher) *DataSourceFactory {
+	return &DataSourceFactory{log: log, dsCfg: DataSourceConfig{l1Signer: cfg.L1Signer(), batchInboxAddress: cfg.BatchInboxAddress}, fetcher: fetcher, domiconDAFetcher: daFetcher}
 }
 
 // OpenData returns a DataIter. This struct implements the `Next` function.
 func (ds *DataSourceFactory) OpenData(ctx context.Context, id eth.BlockID, batcherAddr common.Address) DataIter {
-	return NewDataSource(ctx, ds.log, ds.dsCfg, ds.fetcher, id, batcherAddr)
+	return NewDataSource(ctx, ds.log, ds.dsCfg, ds.fetcher, id, batcherAddr, ds.domiconDAFetcher)
 }
 
 // DataSourceConfig regroups the mandatory rollup.Config fields needed for DataFromEVMTransactions.
@@ -67,24 +67,26 @@ type DataSource struct {
 
 	batcherAddr common.Address
 
-	domiconNodesRpc []string
+	domiconDAFetcher DomiconDAFetcher
 }
 
 // NewDataSource creates a new calldata source. It suppresses errors in fetching the L1 block if they occur.
 // If there is an error, it will attempt to fetch the result on the next call to `Next`.
-func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, block eth.BlockID, batcherAddr common.Address) DataIter {
+func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, block eth.BlockID, batcherAddr common.Address, domiconDAFetcher DomiconDAFetcher) DataIter {
 	_, txs, err := fetcher.InfoAndTxsByHash(ctx, block.Hash)
-	l1EthRpc := ""
-	domiconNodesRpc, _ := getDomiconNodesRpc(ctx, common.HexToAddress("0xl1domiconNodesContractAddr"), log, l1EthRpc)
-	if err != nil || len(domiconNodesRpc) == 0 {
+
+	//l1EthRpc := ""
+	//domiconNodesRpc, _ := getDomiconNodesRpc(ctx, common.HexToAddress("0xl1domiconNodesContractAddr"), log, l1EthRpc)
+	//if err != nil || len(domiconNodesRpc) == 0 {
+	if err != nil {
 		return &DataSource{
-			open:            false,
-			id:              block,
-			dsCfg:           dsCfg,
-			fetcher:         fetcher,
-			log:             log,
-			batcherAddr:     batcherAddr,
-			domiconNodesRpc: []string{},
+			open:             false,
+			id:               block,
+			dsCfg:            dsCfg,
+			fetcher:          fetcher,
+			log:              log,
+			batcherAddr:      batcherAddr,
+			domiconDAFetcher: domiconDAFetcher,
 		}
 	} else {
 		return &DataSource{
@@ -140,7 +142,7 @@ func DataFromEVMTransactions(dsCfg DataSourceConfig, batcherAddr common.Address,
 	return out
 }
 
-func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, log log.Logger, domiconNodesRpc []string) []eth.Data {
+func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, log log.Logger, domiconDAFetcher DomiconDAFetcher) []eth.Data {
 	var out []eth.Data
 	for j, tx := range txs {
 		if to := tx.To(); to != nil && *to == dsCfg.batchInboxAddress {
@@ -154,68 +156,69 @@ func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Addr
 				log.Warn("tx in inbox with unauthorized submitter", "index", j, "txHash", tx.Hash(), "err", err)
 				continue // not an authorized batch submitter, ignore
 			}
-			//da := getDAData(domiconNodesRpc)
-			out = append(out, tx.Data())
+
+			// todo 待优化
+			da, _ := domiconDAFetcher.FileDataByHash(context.Background(), tx.Hash())
+			out = append(out, da)
 		}
 	}
 	return out
 }
 
-func getDomiconNodesRpc(ctx context.Context, l1DomiconNodesContractAddr common.Address, log log.Logger, l1EthRpc string) (map[string]common.Address, error) {
-	nodesAddrRpc := make(map[string]common.Address)
-	l1Client, err := dial.DialEthClientWithTimeout(ctx, dial.DefaultDialTimeout, log, l1EthRpc)
-	if err != nil {
-		return nodesAddrRpc, fmt.Errorf("failed to dial L1 RPC: %w", err)
-	}
-	domiconNodesAbi, err := abi.JSON(strings.NewReader(domiconabi.DomiconNodes))
-	if err != nil {
-		return nodesAddrRpc, fmt.Errorf("parse DomiconNodes abi failed: %w", err)
-	}
-	l1DomiconNodesContract := bind.NewBoundContract(l1DomiconNodesContractAddr, domiconNodesAbi, l1Client, l1Client, nil)
+// func getDomiconNodesRpc(ctx context.Context, l1DomiconNodesContractAddr common.Address, log log.Logger, l1EthRpc string) (map[string]common.Address, error) {
+// 	nodesAddrRpc := make(map[string]common.Address)
+// 	l1Client, err := dial.DialEthClientWithTimeout(ctx, dial.DefaultDialTimeout, log, l1EthRpc)
+// 	if err != nil {
+// 		return nodesAddrRpc, fmt.Errorf("failed to dial L1 RPC: %w", err)
+// 	}
+// 	domiconNodesAbi, err := abi.JSON(strings.NewReader(domiconabi.DomiconNodes))
+// 	if err != nil {
+// 		return nodesAddrRpc, fmt.Errorf("parse DomiconNodes abi failed: %w", err)
+// 	}
+// 	l1DomiconNodesContract := bind.NewBoundContract(l1DomiconNodesContractAddr, domiconNodesAbi, l1Client, l1Client, nil)
 
-	bcNodeAddrs := new([]interface{})
-	err = l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeAddrs, "BROADCAST_NODES")
-	if err != nil {
-		return nodesAddrRpc, err
-	}
-	log.Info("selectBestNode", "addresses:", (*bcNodeAddrs)[0])
-	addrSli, ok := (*bcNodeAddrs)[0].([]common.Address)
-	if !ok {
-		return nodesAddrRpc, errors.New("broadcast node address error format")
-	}
+// 	bcNodeAddrs := new([]interface{})
+// 	err = l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeAddrs, "BROADCAST_NODES")
+// 	if err != nil {
+// 		return nodesAddrRpc, err
+// 	}
+// 	log.Info("selectBestNode", "addresses:", (*bcNodeAddrs)[0])
+// 	addrSli, ok := (*bcNodeAddrs)[0].([]common.Address)
+// 	if !ok {
+// 		return nodesAddrRpc, errors.New("broadcast node address error format")
+// 	}
 
-	log.Info("msg", "addrSli", addrSli)
-	for i, addr := range addrSli {
-		if i > 20 {
-			break
-		}
-		log.Info("msg", "addr", addr)
-		bcNodeInfo := new([]interface{})
-		l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeInfo, "broadcastingNodes", addr)
-		nodeAddr, _ := (*bcNodeInfo)[0].(common.Address)
-		nodeRpc, _ := (*bcNodeInfo)[1].(string)
-		log.Info("bcNodeInfo", "nodeAddr", nodeAddr, "nodeRpc", nodeRpc)
-		nodesAddrRpc[nodeRpc] = nodeAddr
-	}
+// 	log.Info("msg", "addrSli", addrSli)
+// 	for i, addr := range addrSli {
+// 		if i > 20 {
+// 			break
+// 		}
+// 		log.Info("msg", "addr", addr)
+// 		bcNodeInfo := new([]interface{})
+// 		l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeInfo, "broadcastingNodes", addr)
+// 		nodeAddr, _ := (*bcNodeInfo)[0].(common.Address)
+// 		nodeRpc, _ := (*bcNodeInfo)[1].(string)
+// 		log.Info("bcNodeInfo", "nodeAddr", nodeAddr, "nodeRpc", nodeRpc)
+// 		nodesAddrRpc[nodeRpc] = nodeAddr
+// 	}
 
-	return nodesAddrRpc, nil
-}
-func getDAData(ctx context.Context, log log.Logger, nodesAddrRpc map[string]common.Address, hash common.Hash) []byte {
-	//todo
-	for rpcUrl, _ := range nodesAddrRpc {
-		domiconClient, err := dial.NewStaticL2RollupProvider(ctx, log, rpcUrl)
-		if err != nil {
-			continue
-		}
-		client, err := domiconClient.RollupClient(ctx)
-		if err != nil {
-			continue
-		}
-		da, err := client.FileDataByHash(ctx, hash)
-		if err == nil {
-			return da
-		}
-	}
+// 	return nodesAddrRpc, nil
+// }
+// func getDAData(ctx context.Context, log log.Logger, nodesAddrRpc map[string]common.Address, hash common.Hash) []byte {
+// 	for rpcUrl, _ := range nodesAddrRpc {
+// 		domiconClient, err := dial.NewStaticL2RollupProvider(ctx, log, rpcUrl)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		client, err := domiconClient.RollupClient(ctx)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		da, err := client.FileDataByHash(ctx, hash)
+// 		if err == nil {
+// 			return da
+// 		}
+// 	}
 
-	return []byte{}
-}
+// 	return []byte{}
+// }

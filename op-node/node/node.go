@@ -44,14 +44,15 @@ type OpNode struct {
 	l1SafeSub      ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 	l1FinalizedSub ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 
-	l1Source  *sources.L1Client     // L1 Client to fetch data from
-	l2Driver  *driver.Driver        // L2 Engine to Sync
-	l2Source  *sources.EngineClient // L2 Execution Engine RPC bindings
-	server    *rpcServer            // RPC server hosting the rollup-node API
-	p2pNode   *p2p.NodeP2P          // P2P node functionality
-	p2pSigner p2p.Signer            // p2p gogssip application messages will be signed with this signer
-	tracer    Tracer                // tracer to get events for testing/debugging
-	runCfg    *RuntimeConfig        // runtime configurables
+	l1Source      *sources.L1Client     // L1 Client to fetch data from
+	l2Driver      *driver.Driver        // L2 Engine to Sync
+	l2Source      *sources.EngineClient // L2 Execution Engine RPC bindings
+	server        *rpcServer            // RPC server hosting the rollup-node API
+	p2pNode       *p2p.NodeP2P          // P2P node functionality
+	p2pSigner     p2p.Signer            // p2p gogssip application messages will be signed with this signer
+	tracer        Tracer                // tracer to get events for testing/debugging
+	runCfg        *RuntimeConfig        // runtime configurables
+	domiconSource *sources.RollupClient // DA data from
 
 	rollupHalt string // when to halt the rollup, disabled if empty
 
@@ -151,6 +152,10 @@ func (n *OpNode) initTracer(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
+func (n *OpNode) initDomiconSource(ctx context.Context, rpc string) {
+
+}
+
 func (n *OpNode) initL1(ctx context.Context, cfg *Config) error {
 	l1Node, rpcCfg, err := cfg.L1.Setup(ctx, n.log, &cfg.Rollup)
 	if err != nil {
@@ -159,13 +164,11 @@ func (n *OpNode) initL1(ctx context.Context, cfg *Config) error {
 
 	// Set the RethDB path in the EthClientConfig, if there is one configured.
 	rpcCfg.EthClientConfig.RethDBPath = cfg.RethDBPath
-
 	n.l1Source, err = sources.NewL1Client(
 		client.NewInstrumentedRPC(l1Node, n.metrics), n.log, n.metrics.L1SourceCache, rpcCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create L1 source: %w", err)
 	}
-
 	if err := cfg.Rollup.ValidateL1Config(ctx, n.l1Source); err != nil {
 		return fmt.Errorf("failed to validate the L1 config: %w", err)
 	}
@@ -305,7 +308,13 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config, snapshotLog log.Logger
 		return err
 	}
 
-	n.l2Driver = driver.NewDriver(&cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source, n, n, n.log, snapshotLog, n.metrics, cfg.ConfigPersistence, &cfg.Sync)
+	domiconNode, err := client.NewRPC(ctx, n.log, "")
+	if err != nil {
+		return err
+	}
+	n.domiconSource = sources.NewRollupClient(domiconNode)
+
+	n.l2Driver = driver.NewDriver(&cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source, n, n, n.log, snapshotLog, n.metrics, cfg.ConfigPersistence, &cfg.Sync, n.domiconSource)
 
 	return nil
 }
