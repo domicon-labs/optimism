@@ -148,14 +148,20 @@ func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Addr
 	var out []eth.Data
 	for j, tx := range txs {
 		if to := tx.To(); to != nil && *to == dsCfg.batchInboxAddress {
-			seqDataSubmitter, err := dsCfg.l1Signer.Sender(tx) // optimization: only derive sender if To is correct
-			if err != nil {
-				log.Warn("tx in inbox with invalid signature", "index", j, "txHash", tx.Hash(), "err", err)
-				continue // bad signature, ignore
-			}
+			// seqDataSubmitter, err := dsCfg.l1Signer.Sender(tx) // optimization: only derive sender if To is correct
+			// if err != nil {
+			// 	log.Warn("tx in inbox with invalid signature", "index", j, "txHash", tx.Hash(), "err", err)
+			// 	continue // bad signature, ignore
+			// }
+
+			// todo check tx result
+			inputData := tx.Data()
+			log.Info("DataFromDomiconTransactions", "inputData len", len(inputData), "inputData", inputData)
+			userAddrBytes := inputData[10:20]
+			userAddr := common.BytesToAddress(userAddrBytes)
 			// some random L1 user might have sent a transaction to our batch inbox, ignore them
-			if seqDataSubmitter != batcherAddr {
-				log.Warn("tx in inbox with unauthorized submitter", "index", j, "txHash", tx.Hash(), "err", err)
+			if userAddr != batcherAddr {
+				log.Warn("tx in inbox with unauthorized submitter", "index", j, "txHash", tx.Hash())
 				continue // not an authorized batch submitter, ignore
 			}
 
