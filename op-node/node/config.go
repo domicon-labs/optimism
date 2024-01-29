@@ -62,6 +62,13 @@ type Config struct {
 
 	// [OPTIONAL] The reth DB path to read receipts from
 	RethDBPath string
+
+	DaSourceCfg DaSourceConfig
+}
+
+type DaSourceConfig struct {
+	L1URL                  string
+	L1DomiconNodesContract string
 }
 
 type RPCConfig struct {

@@ -44,15 +44,15 @@ type OpNode struct {
 	l1SafeSub      ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 	l1FinalizedSub ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 
-	l1Source      *sources.L1Client     // L1 Client to fetch data from
-	l2Driver      *driver.Driver        // L2 Engine to Sync
-	l2Source      *sources.EngineClient // L2 Execution Engine RPC bindings
-	server        *rpcServer            // RPC server hosting the rollup-node API
-	p2pNode       *p2p.NodeP2P          // P2P node functionality
-	p2pSigner     p2p.Signer            // p2p gogssip application messages will be signed with this signer
-	tracer        Tracer                // tracer to get events for testing/debugging
-	runCfg        *RuntimeConfig        // runtime configurables
-	domiconSource *sources.RollupClient // DA data from
+	l1Source  *sources.L1Client     // L1 Client to fetch data from
+	l2Driver  *driver.Driver        // L2 Engine to Sync
+	l2Source  *sources.EngineClient // L2 Execution Engine RPC bindings
+	server    *rpcServer            // RPC server hosting the rollup-node API
+	p2pNode   *p2p.NodeP2P          // P2P node functionality
+	p2pSigner p2p.Signer            // p2p gogssip application messages will be signed with this signer
+	tracer    Tracer                // tracer to get events for testing/debugging
+	runCfg    *RuntimeConfig        // runtime configurables
+	daSource  *DaSource             // DA data from
 
 	rollupHalt string // when to halt the rollup, disabled if empty
 
@@ -150,10 +150,6 @@ func (n *OpNode) initTracer(ctx context.Context, cfg *Config) error {
 		n.tracer = new(noOpTracer)
 	}
 	return nil
-}
-
-func (n *OpNode) initDomiconSource(ctx context.Context, rpc string) {
-
 }
 
 func (n *OpNode) initL1(ctx context.Context, cfg *Config) error {
@@ -308,13 +304,9 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config, snapshotLog log.Logger
 		return err
 	}
 
-	domiconNode, err := client.NewRPC(ctx, n.log, "")
-	if err != nil {
-		return err
-	}
-	n.domiconSource = sources.NewRollupClient(domiconNode)
+	n.daSource = NewDaSource(ctx, n.log, &cfg.DaSourceCfg)
 
-	n.l2Driver = driver.NewDriver(&cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source, n, n, n.log, snapshotLog, n.metrics, cfg.ConfigPersistence, &cfg.Sync, n.domiconSource)
+	n.l2Driver = driver.NewDriver(&cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source, n, n, n.log, snapshotLog, n.metrics, cfg.ConfigPersistence, &cfg.Sync, n.daSource)
 
 	return nil
 }

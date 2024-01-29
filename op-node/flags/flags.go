@@ -41,6 +41,11 @@ var (
 		Value:       "",
 		Destination: new(string),
 	}
+	L1DomiconNodesContract = &cli.StringFlag{
+		Name:    "l1.domicon-nodes-contract",
+		Usage:   "Address of L1 DOMICON-NODES-CONTRACT ",
+		EnvVars: prefixEnvVars("L1_DOMICON_NODES_CONTRACT"),
+	}
 	/* Optional Flags */
 	SyncModeFlag = &cli.GenericFlag{
 		Name:    "syncmode",
@@ -265,6 +270,7 @@ var requiredFlags = []cli.Flag{
 	L1NodeAddr,
 	L2EngineAddr,
 	L2EngineJWTSecret,
+	L1DomiconNodesContract,
 }
 
 var optionalFlags = []cli.Flag{

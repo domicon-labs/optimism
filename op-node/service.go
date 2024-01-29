@@ -106,6 +106,10 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		Sync:              *syncConfig,
 		RollupHalt:        haltOption,
 		RethDBPath:        ctx.String(flags.L1RethDBPath.Name),
+		DaSourceCfg: node.DaSourceConfig{
+			L1URL:                  ctx.String(flags.L1NodeAddr.Name),
+			L1DomiconNodesContract: ctx.String(flags.L1DomiconNodesContract.Name),
+		},
 	}
 
 	if err := cfg.LoadPersisted(log); err != nil {
