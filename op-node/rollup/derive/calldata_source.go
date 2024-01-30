@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -65,7 +66,8 @@ type DataSource struct {
 	fetcher L1TransactionFetcher
 	log     log.Logger
 
-	batcherAddr common.Address
+	batcherAddr      common.Address
+	domiconDAFetcher DomiconDAFetcher
 }
 
 // NewDataSource creates a new calldata source. It suppresses errors in fetching the L1 block if they occur.
@@ -75,17 +77,19 @@ func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, 
 
 	if err != nil {
 		return &DataSource{
-			open:        false,
-			id:          block,
-			dsCfg:       dsCfg,
-			fetcher:     fetcher,
-			log:         log,
-			batcherAddr: batcherAddr,
+			open:             false,
+			id:               block,
+			dsCfg:            dsCfg,
+			fetcher:          fetcher,
+			log:              log,
+			batcherAddr:      batcherAddr,
+			domiconDAFetcher: domiconDAFetcher,
 		}
 	} else {
 		return &DataSource{
 			open: true,
-			data: DataFromEVMTransactions(dsCfg, batcherAddr, txs, log.New("origin", block)),
+			//data: DataFromEVMTransactions(dsCfg, batcherAddr, txs, log.New("origin", block)),
+			data: DataFromDomiconTransactions(dsCfg, batcherAddr, txs, log.New("origin", block), domiconDAFetcher),
 		}
 	}
 }
@@ -97,7 +101,7 @@ func (ds *DataSource) Next(ctx context.Context) (eth.Data, error) {
 	if !ds.open {
 		if _, txs, err := ds.fetcher.InfoAndTxsByHash(ctx, ds.id.Hash); err == nil {
 			ds.open = true
-			ds.data = DataFromEVMTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id))
+			ds.data = DataFromDomiconTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id), ds.domiconDAFetcher)
 		} else if errors.Is(err, ethereum.NotFound) {
 			return nil, NewResetError(fmt.Errorf("failed to open calldata source: %w", err))
 		} else {
@@ -131,6 +135,40 @@ func DataFromEVMTransactions(dsCfg DataSourceConfig, batcherAddr common.Address,
 				continue // not an authorized batch submitter, ignore
 			}
 			out = append(out, tx.Data())
+		}
+	}
+	return out
+}
+
+func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, log log.Logger, domiconDAFetcher DomiconDAFetcher) []eth.Data {
+	log.Info("hddtest DataFromDomiconTransactions")
+	var out []eth.Data
+	for j, tx := range txs {
+		if to := tx.To(); to != nil && *to == dsCfg.batchInboxAddress {
+			// todo check tx result
+			inputData := hexutil.Encode(tx.Data())
+			log.Info("DataFromDomiconTransactions", "inputData len", len(inputData), "inputData string format", inputData)
+			if len(inputData) != 842 {
+				log.Warn("tx inputData length is incorrect")
+				continue
+			}
+
+			userAddrTmp := inputData[226:266]
+			userAddr := common.HexToAddress("0x" + userAddrTmp)
+			log.Info("DataFromDomiconTransactions", "userAddr parsed from tx input is", userAddr, "batcherAddr", batcherAddr)
+			// some random L1 user might have sent a transaction to our batch inbox, ignore them
+			if userAddr != batcherAddr {
+				log.Warn("tx in inbox with unauthorized submitter", "index", j, "txHash", tx.Hash())
+				continue // not an authorized batch submitter, ignore
+			}
+
+			da, err := domiconDAFetcher.FileDataByHash(context.Background(), tx.Hash())
+			if err != nil {
+				log.Warn("FileDataByHash failed", "tx hash", tx.Hash(), "error", err)
+				continue
+			}
+			log.Info("DataFromDomiconTransactions", "find DA data with len", len(da))
+			out = append(out, da)
 		}
 	}
 	return out

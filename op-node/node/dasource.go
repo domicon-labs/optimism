@@ -87,9 +87,12 @@ func (d *DaSource) FileDataByHash(ctx context.Context, hash common.Hash) ([]byte
 		da, err := domiconClient.FileDataByHash(ctx, hash)
 		if err == nil {
 			return da, nil
+		} else {
+			log.Warn("FileDataByHash failed", "error", err)
 		}
 	}
 	for rpc := range d.domiconNodesRpc {
+		log.Info("FileDataByHash", "try rpc", rpc)
 		nextNode, err := d.TryNextNode(ctx, rpc)
 		if err != nil {
 			continue
@@ -99,6 +102,8 @@ func (d *DaSource) FileDataByHash(ctx context.Context, hash common.Hash) ([]byte
 		da, err := domiconClient.FileDataByHash(ctx, hash)
 		if err == nil {
 			return da, nil
+		} else {
+			log.Warn("FileDataByHash failed again", "error", err, "rpc", rpc)
 		}
 	}
 	return []byte{}, nil

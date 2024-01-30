@@ -58,7 +58,7 @@ func (r *RollupClient) Version(ctx context.Context) (string, error) {
 func (r *RollupClient) FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error) {
 	log.Info("FileDataByHash", "hash", hash)
 	var rpcFileData RPCFileData
-	err := r.rpc.CallContext(ctx, &rpcFileData, "optimism_FileDataByHash", hash)
+	err := r.rpc.CallContext(ctx, &rpcFileData, "optimism_fileDataByHash", hash)
 	return rpcFileData.Data, err
 }
 
