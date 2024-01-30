@@ -26,14 +26,15 @@ const (
 type HealthMonitorTestSuite struct {
 	suite.Suite
 
-	log          log.Logger
-	rc           *testutils.MockRollupClient
-	pc           *p2pMocks.API
-	interval     uint64
-	safeInterval uint64
-	minPeerCount uint64
-	rollupCfg    *rollup.Config
-	monitor      HealthMonitor
+	log            log.Logger
+	rc             *testutils.MockRollupClient
+	pc             *p2pMocks.API
+	interval       uint64
+	unsafeInterval uint64
+	safeInterval   uint64
+	minPeerCount   uint64
+	rollupCfg      *rollup.Config
+	monitor        HealthMonitor
 }
 
 func (s *HealthMonitorTestSuite) SetupSuite() {
@@ -41,6 +42,7 @@ func (s *HealthMonitorTestSuite) SetupSuite() {
 	s.rc = &testutils.MockRollupClient{}
 	s.pc = &p2pMocks.API{}
 	s.interval = 1
+	s.unsafeInterval = 3
 	s.safeInterval = 5
 	s.minPeerCount = minPeerCount
 	s.rollupCfg = &rollup.Config{
@@ -49,7 +51,7 @@ func (s *HealthMonitorTestSuite) SetupSuite() {
 }
 
 func (s *HealthMonitorTestSuite) SetupTest() {
-	s.monitor = NewSequencerHealthMonitor(s.log, s.interval, s.safeInterval, s.minPeerCount, s.rollupCfg, s.rc, s.pc)
+	s.monitor = NewSequencerHealthMonitor(s.log, s.interval, s.unsafeInterval, s.safeInterval, s.minPeerCount, s.rollupCfg, s.rc, s.pc)
 	err := s.monitor.Start()
 	s.NoError(err)
 }
@@ -78,7 +80,7 @@ func (s *HealthMonitorTestSuite) TestUnhealthyLowPeerCount() {
 
 	healthUpdateCh := s.monitor.Subscribe()
 	healthy := <-healthUpdateCh
-	s.False(healthy)
+	s.NotNil(healthy)
 }
 
 func (s *HealthMonitorTestSuite) TestUnhealthyUnsafeHeadNotProgressing() {
@@ -90,10 +92,12 @@ func (s *HealthMonitorTestSuite) TestUnhealthyUnsafeHeadNotProgressing() {
 	now := uint64(time.Now().Unix())
 	ss1 := &eth.SyncStatus{
 		UnsafeL2: eth.L2BlockRef{
-			Time: now - 1,
+			Number: 5,
+			Time:   now - 1,
 		},
 		SafeL2: eth.L2BlockRef{
-			Time: now - 2,
+			Number: 1,
+			Time:   now - 2,
 		},
 	}
 	s.rc.ExpectSyncStatus(ss1, nil)
@@ -104,9 +108,9 @@ func (s *HealthMonitorTestSuite) TestUnhealthyUnsafeHeadNotProgressing() {
 	for i := 0; i < 3; i++ {
 		healthy := <-healthUpdateCh
 		if i < 2 {
-			s.True(healthy)
+			s.Nil(healthy)
 		} else {
-			s.False(healthy)
+			s.NotNil(healthy)
 		}
 	}
 }
@@ -139,9 +143,9 @@ func (s *HealthMonitorTestSuite) TestUnhealthySafeHeadNotProgressing() {
 	for i := 0; i < 6; i++ {
 		healthy := <-healthUpdateCh
 		if i < 5 {
-			s.True(healthy)
+			s.Nil(healthy)
 		} else {
-			s.False(healthy)
+			s.NotNil(healthy)
 		}
 	}
 }

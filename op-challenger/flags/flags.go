@@ -15,7 +15,7 @@ import (
 	openum "github.com/ethereum-optimism/optimism/op-service/enum"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -49,6 +49,7 @@ var (
 		Name:    "trace-type",
 		Usage:   "The trace types to support. Valid options: " + openum.EnumString(config.TraceTypes),
 		EnvVars: prefixEnvVars("TRACE_TYPE"),
+		Value:   cli.NewStringSlice(config.TraceTypeCannon.String()),
 	}
 	DatadirFlag = &cli.StringFlag{
 		Name:    "datadir",
@@ -61,6 +62,12 @@ var (
 		Usage:   "Maximum number of threads to use when progressing games",
 		EnvVars: prefixEnvVars("MAX_CONCURRENCY"),
 		Value:   uint(runtime.NumCPU()),
+	}
+	MaxPendingTransactionsFlag = &cli.Uint64Flag{
+		Name:    "max-pending-tx",
+		Usage:   "The maximum number of pending transactions. 0 for no limit.",
+		Value:   config.DefaultMaxPendingTx,
+		EnvVars: prefixEnvVars("MAX_PENDING_TX"),
 	}
 	HTTPPollInterval = &cli.DurationFlag{
 		Name:    "http-poll-interval",
@@ -135,13 +142,14 @@ var (
 var requiredFlags = []cli.Flag{
 	L1EthRpcFlag,
 	FactoryAddressFlag,
-	TraceTypeFlag,
 	DatadirFlag,
 }
 
 // optionalFlags is a list of unchecked cli flags
 var optionalFlags = []cli.Flag{
+	TraceTypeFlag,
 	MaxConcurrencyFlag,
+	MaxPendingTransactionsFlag,
 	HTTPPollInterval,
 	RollupRpcFlag,
 	GameAllowlistFlag,
@@ -275,6 +283,7 @@ func NewConfigFromCLI(ctx *cli.Context) (*config.Config, error) {
 		GameAllowlist:          allowedGames,
 		GameWindow:             ctx.Duration(GameWindowFlag.Name),
 		MaxConcurrency:         maxConcurrency,
+		MaxPendingTx:           ctx.Uint64(MaxPendingTransactionsFlag.Name),
 		PollInterval:           ctx.Duration(HTTPPollInterval.Name),
 		RollupRpc:              ctx.String(RollupRpcFlag.Name),
 		CannonNetwork:          ctx.String(CannonNetworkFlag.Name),

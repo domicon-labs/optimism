@@ -77,15 +77,22 @@ type L2OutputSubmitter struct {
 }
 
 // NewL2OutputSubmitter creates a new L2 Output Submitter
-func NewL2OutputSubmitter(setup DriverSetup) (*L2OutputSubmitter, error) {
+func NewL2OutputSubmitter(setup DriverSetup) (_ *L2OutputSubmitter, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	// The above context is long-lived, and passed to the `L2OutputSubmitter` instance. This context is closed by
+	// `StopL2OutputSubmitting`, but if this function returns an error or panics, we want to ensure that the context
+	// doesn't leak.
+	defer func() {
+		if err != nil || recover() != nil {
+			cancel()
+		}
+	}()
 
 	if setup.Cfg.L2OutputOracleAddr != nil {
 		return newL2OOSubmitter(ctx, cancel, setup)
 	} else if setup.Cfg.DisputeGameFactoryAddr != nil {
 		return newDGFSubmitter(ctx, cancel, setup)
 	} else {
-		cancel()
 		return nil, errors.New("neither the `L2OutputOracle` nor `DisputeGameFactory` addresses were provided")
 	}
 }
@@ -310,12 +317,20 @@ func proposeL2OutputTxData(abi *abi.ABI, output *eth.OutputResponse) ([]byte, er
 		new(big.Int).SetUint64(output.Status.CurrentL1.Number))
 }
 
-func (l *L2OutputSubmitter) ProposeL2OutputDGFTxData(output *eth.OutputResponse) ([]byte, error) {
-	return proposeL2OutputDGFTxData(l.dgfABI, l.Cfg.DisputeGameType, output)
+func (l *L2OutputSubmitter) ProposeL2OutputDGFTxData(output *eth.OutputResponse) ([]byte, *big.Int, error) {
+	bond, err := l.dgfContract.InitBonds(&bind.CallOpts{}, l.Cfg.DisputeGameType)
+	if err != nil {
+		return nil, nil, err
+	}
+	data, err := proposeL2OutputDGFTxData(l.dgfABI, l.Cfg.DisputeGameType, output)
+	if err != nil {
+		return nil, nil, err
+	}
+	return data, bond, err
 }
 
 // proposeL2OutputDGFTxData creates the transaction data for the DisputeGameFactory's `create` function
-func proposeL2OutputDGFTxData(abi *abi.ABI, gameType uint8, output *eth.OutputResponse) ([]byte, error) {
+func proposeL2OutputDGFTxData(abi *abi.ABI, gameType uint32, output *eth.OutputResponse) ([]byte, error) {
 	return abi.Pack("create", gameType, output.OutputRoot, math.U256Bytes(new(big.Int).SetUint64(output.BlockRef.Number)))
 }
 
@@ -356,7 +371,7 @@ func (l *L2OutputSubmitter) sendTransaction(ctx context.Context, output *eth.Out
 
 	var receipt *types.Receipt
 	if l.Cfg.DisputeGameFactoryAddr != nil {
-		data, err := l.ProposeL2OutputDGFTxData(output)
+		data, bond, err := l.ProposeL2OutputDGFTxData(output)
 		if err != nil {
 			return err
 		}
@@ -364,6 +379,7 @@ func (l *L2OutputSubmitter) sendTransaction(ctx context.Context, output *eth.Out
 			TxData:   data,
 			To:       l.Cfg.DisputeGameFactoryAddr,
 			GasLimit: 0,
+			Value:    bond,
 		})
 		if err != nil {
 			return err

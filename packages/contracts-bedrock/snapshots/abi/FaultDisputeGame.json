@@ -4,7 +4,7 @@
       {
         "internalType": "GameType",
         "name": "_gameType",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "Claim",
@@ -100,16 +100,16 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "bondManager",
-    "outputs": [
+    "inputs": [
       {
-        "internalType": "contract IBondManager",
-        "name": "",
+        "internalType": "address",
+        "name": "_recipient",
         "type": "address"
       }
     ],
-    "stateMutability": "view",
+    "name": "claimCredit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -128,9 +128,19 @@
         "type": "uint32"
       },
       {
-        "internalType": "bool",
-        "name": "countered",
-        "type": "bool"
+        "internalType": "address",
+        "name": "counteredBy",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "claimant",
+        "type": "address"
+      },
+      {
+        "internalType": "uint128",
+        "name": "bond",
+        "type": "uint128"
       },
       {
         "internalType": "Claim",
@@ -180,6 +190,25 @@
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "credit",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "_parentIndex",
         "type": "uint256"
@@ -215,7 +244,7 @@
       {
         "internalType": "GameType",
         "name": "gameType_",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "Claim",
@@ -251,7 +280,7 @@
       {
         "internalType": "GameType",
         "name": "gameType_",
-        "type": "uint8"
+        "type": "uint32"
       }
     ],
     "stateMutability": "view",
@@ -284,10 +313,29 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "Position",
+        "name": "_position",
+        "type": "uint128"
+      }
+    ],
+    "name": "getRequiredBond",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "requiredBond_",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "initialize",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -529,6 +577,11 @@
   },
   {
     "inputs": [],
+    "name": "BondTransferFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "CannotDefendRootClaim",
     "type": "error"
   },
@@ -565,6 +618,11 @@
   {
     "inputs": [],
     "name": "GameNotInProgress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientBond",
     "type": "error"
   },
   {

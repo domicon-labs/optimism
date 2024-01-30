@@ -128,13 +128,16 @@ func (cfg *Config) ValidateL1Config(ctx context.Context, client L1Client) error 
 }
 
 // ValidateL2Config checks L2 config variables for errors.
-func (cfg *Config) ValidateL2Config(ctx context.Context, client L2Client) error {
+func (cfg *Config) ValidateL2Config(ctx context.Context, client L2Client, skipL2GenesisBlockHash bool) error {
 	// Validate the L2 Client Chain ID
 	if err := cfg.CheckL2ChainID(ctx, client); err != nil {
 		return err
 	}
 
-	// Validate the Rollup L2 Genesis Blockhash
+	// Validate the Rollup L2 Genesis Blockhash if requested. We skip this when doing EL sync
+	if skipL2GenesisBlockHash {
+		return nil
+	}
 	if err := cfg.CheckL2GenesisBlockHash(ctx, client); err != nil {
 		return err
 	}
@@ -299,6 +302,14 @@ func (c *Config) IsDelta(timestamp uint64) bool {
 // IsEcotone returns true if the Ecotone hardfork is active at or past the given timestamp.
 func (c *Config) IsEcotone(timestamp uint64) bool {
 	return c.EcotoneTime != nil && timestamp >= *c.EcotoneTime
+}
+
+// IsEcotoneActivationBlock returns whether the specified block is the first block subject to the
+// Ecotone upgrade. Ecotone activation at genesis does not count.
+func (c *Config) IsEcotoneActivationBlock(l2BlockTime uint64) bool {
+	return c.IsEcotone(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsEcotone(l2BlockTime-c.BlockTime)
 }
 
 // IsFjord returns true if the Fjord hardfork is active at or past the given timestamp.

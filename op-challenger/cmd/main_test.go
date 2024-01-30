@@ -75,8 +75,10 @@ func TestL1ETHRPCAddress(t *testing.T) {
 }
 
 func TestTraceType(t *testing.T) {
-	t.Run("Required", func(t *testing.T) {
-		verifyArgsInvalid(t, "flag trace-type is required", addRequiredArgsExcept("", "--trace-type"))
+	t.Run("Default", func(t *testing.T) {
+		expectedDefault := config.TraceTypeCannon
+		cfg := configForArgs(t, addRequiredArgsExcept(expectedDefault, "--trace-type"))
+		require.Equal(t, []config.TraceType{expectedDefault}, cfg.TraceTypes)
 	})
 
 	for _, traceType := range config.TraceTypes {
@@ -183,6 +185,26 @@ func TestMaxConcurrency(t *testing.T) {
 			t,
 			"max-concurrency must not be 0",
 			addRequiredArgs(config.TraceTypeAlphabet, "--max-concurrency", "0"))
+	})
+}
+
+func TestMaxPendingTx(t *testing.T) {
+	t.Run("Valid", func(t *testing.T) {
+		expected := uint64(345)
+		cfg := configForArgs(t, addRequiredArgs(config.TraceTypeAlphabet, "--max-pending-tx", "345"))
+		require.Equal(t, expected, cfg.MaxPendingTx)
+	})
+
+	t.Run("Zero", func(t *testing.T) {
+		cfg := configForArgs(t, addRequiredArgs(config.TraceTypeAlphabet, "--max-pending-tx", "0"))
+		require.Equal(t, uint64(0), cfg.MaxPendingTx)
+	})
+
+	t.Run("Invalid", func(t *testing.T) {
+		verifyArgsInvalid(
+			t,
+			"invalid value \"abc\" for flag -max-pending-tx",
+			addRequiredArgs(config.TraceTypeAlphabet, "--max-pending-tx", "abc"))
 	})
 }
 

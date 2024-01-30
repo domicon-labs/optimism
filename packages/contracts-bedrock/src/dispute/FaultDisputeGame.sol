@@ -4,7 +4,6 @@ pragma solidity ^0.8.15;
 import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
 import { IFaultDisputeGame } from "src/dispute/interfaces/IFaultDisputeGame.sol";
 import { IInitializable } from "src/dispute/interfaces/IInitializable.sol";
-import { IBondManager } from "src/dispute/interfaces/IBondManager.sol";
 import { IBigStepper, IPreimageOracle } from "src/dispute/interfaces/IBigStepper.sol";
 
 import { Clone } from "src/libraries/Clone.sol";
@@ -60,14 +59,14 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
     /// @inheritdoc IDisputeGame
     GameStatus public status;
 
-    /// @inheritdoc IDisputeGame
-    IBondManager public bondManager;
-
     /// @inheritdoc IFaultDisputeGame
     Hash public l1Head;
 
     /// @notice An append-only array of all claims made during the dispute game.
     ClaimData[] public claimData;
+
+    /// @notice Credited balances for winning participants.
+    mapping(address => uint256) public credit;
 
     /// @notice An internal mapping to allow for constant-time lookups of existing claims.
     mapping(ClaimHash => bool) internal claims;
@@ -82,8 +81,8 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
     bool internal initialized;
 
     /// @notice Semantic version.
-    /// @custom:semver 0.0.21
-    string public constant version = "0.0.21";
+    /// @custom:semver 0.0.24
+    string public constant version = "0.0.24";
 
     /// @param _gameType The type ID of the game.
     /// @param _absolutePrestate The absolute prestate of the instruction trace.
@@ -188,7 +187,7 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
 
         // Set the parent claim as countered. We do not need to append a new claim to the game;
         // instead, we can just set the existing parent as countered.
-        parent.countered = true;
+        parent.counteredBy = msg.sender;
     }
 
     /// @notice Generic move function, used for both `attack` and `defend` moves.
@@ -228,6 +227,9 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
             _verifyExecBisectionRoot(_claim, _challengeIndex, parentPos, _isAttack);
         }
 
+        // INVARIANT: The `msg.value` must be sufficient to cover the required bond.
+        if (getRequiredBond(nextPosition) > msg.value) revert InsufficientBond();
+
         // Fetch the grandparent clock, if it exists.
         // The grandparent clock should always exist unless the parent is the root claim.
         Clock grandparentClock;
@@ -266,15 +268,17 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
         claimData.push(
             ClaimData({
                 parentIndex: uint32(_challengeIndex),
+                counteredBy: address(0),
+                claimant: msg.sender,
+                bond: uint128(msg.value),
                 claim: _claim,
                 position: nextPosition,
-                clock: nextClock,
-                countered: false
+                clock: nextClock
             })
         );
 
         // Set the parent claim as countered.
-        claimData[_challengeIndex].countered = true;
+        claimData[_challengeIndex].counteredBy = msg.sender;
 
         // Update the subgame rooted at the parent claim.
         subgames[_challengeIndex].push(claimData.length - 1);
@@ -354,7 +358,7 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
         if (!subgameAtRootResolved) revert OutOfOrderResolution();
 
         // Update the global game status; The dispute has concluded.
-        status_ = claimData[0].countered ? GameStatus.CHALLENGER_WINS : GameStatus.DEFENDER_WINS;
+        status_ = claimData[0].counteredBy == address(0) ? GameStatus.DEFENDER_WINS : GameStatus.CHALLENGER_WINS;
         resolvedAt = Timestamp.wrap(uint64(block.timestamp));
 
         emit Resolved(status = status_);
@@ -378,14 +382,19 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
         uint256 challengeIndicesLen = challengeIndices.length;
 
         // INVARIANT: Cannot resolve subgames twice
-        // Uncontested claims are resolved implicitly unless they are the root claim
-        if ((_claimIndex == 0 && subgameAtRootResolved) || (challengeIndicesLen == 0 && _claimIndex != 0)) {
+        if (_claimIndex == 0 && subgameAtRootResolved) {
             revert ClaimAlreadyResolved();
         }
 
-        // Assume parent is honest until proven otherwise
-        bool countered = false;
+        // Uncontested claims are resolved implicitly unless they are the root claim. Pay out the bond to the claimant
+        // and return early.
+        if (challengeIndicesLen == 0 && _claimIndex != 0) {
+            _distributeBond(parent.claimant, parent);
+            return;
+        }
 
+        // Assume parent is honest until proven otherwise
+        address countered = address(0);
         for (uint256 i = 0; i < challengeIndicesLen; ++i) {
             uint256 challengeIndex = challengeIndices[i];
 
@@ -395,15 +404,19 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
             ClaimData storage claim = claimData[challengeIndex];
 
             // Ignore false claims
-            if (!claim.countered) {
-                countered = true;
+            if (claim.counteredBy == address(0)) {
+                countered = msg.sender;
                 break;
             }
         }
 
+        // If the parent was not successfully countered, pay out the parent's bond to the claimant.
+        // If the parent was successfully countered, pay out the parent's bond to the challenger.
+        _distributeBond(countered == address(0) ? parent.claimant : countered, parent);
+
         // Once a subgame is resolved, we percolate the result up the DAG so subsequent calls to
         // resolveClaim will not need to traverse this subgame.
-        parent.countered = countered;
+        parent.counteredBy = countered;
 
         // Resolved subgames have no entries
         delete subgames[_claimIndex];
@@ -438,12 +451,13 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
     ////////////////////////////////////////////////////////////////
 
     /// @inheritdoc IInitializable
-    function initialize() external {
+    function initialize() external payable {
         // SAFETY: Any revert in this function will bubble up to the DisputeGameFactory and
         // prevent the game from being created.
         //
         // Implicit assumptions:
         // - The `gameStatus` state variable defaults to 0, which is `GameStatus.IN_PROGRESS`
+        // - The dispute game factory will enforce the required bond to initialize the game.
         //
         // Explicit checks:
         // - The game must not have already been initialized.
@@ -473,10 +487,12 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
         claimData.push(
             ClaimData({
                 parentIndex: type(uint32).max,
+                counteredBy: address(0),
+                claimant: tx.origin,
+                bond: uint128(msg.value),
                 claim: rootClaim(),
                 position: ROOT_POSITION,
-                clock: LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp))),
-                countered: false
+                clock: LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp)))
             })
         );
 
@@ -493,6 +509,27 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
     /// @notice Returns the length of the `claimData` array.
     function claimDataLen() external view returns (uint256 len_) {
         len_ = claimData.length;
+    }
+
+    /// @notice Returns the required bond for a given move kind.
+    /// @param _position The position of the bonded interaction.
+    /// @return requiredBond_ The required ETH bond for the given move, in wei.
+    function getRequiredBond(Position _position) public pure returns (uint256 requiredBond_) {
+        // TODO
+        _position;
+        requiredBond_ = 0;
+    }
+
+    /// @notice Claim the credit belonging to the recipient address.
+    /// @param _recipient The owner and recipient of the credit.
+    function claimCredit(address _recipient) external {
+        // Remove the credit from the recipient prior to performing the external call.
+        uint256 recipientCredit = credit[_recipient];
+        credit[_recipient] = 0;
+
+        // Transfer the credit to the recipient.
+        (bool success,) = _recipient.call{ value: recipientCredit }(hex"");
+        if (!success) revert BondTransferFailed();
     }
 
     ////////////////////////////////////////////////////////////////
@@ -537,6 +574,19 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, ISemver {
     ////////////////////////////////////////////////////////////////
     //                          HELPERS                           //
     ////////////////////////////////////////////////////////////////
+
+    /// @notice Pays out the bond of a claim to a given recipient.
+    /// @param _recipient The recipient of the bond.
+    /// @param _bonded The claim to pay out the bond of.
+    function _distributeBond(address _recipient, ClaimData storage _bonded) internal {
+        // Set all bits in the bond value to indicate that the bond has been paid out.
+        uint256 bond = _bonded.bond;
+        if (bond == type(uint128).max) revert ClaimAlreadyResolved();
+        _bonded.bond = type(uint128).max;
+
+        // Increase the recipient's credit.
+        credit[_recipient] += bond;
+    }
 
     /// @notice Verifies the integrity of an execution bisection subgame's root claim. Reverts if the claim
     ///         is invalid.

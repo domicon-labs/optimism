@@ -9,7 +9,7 @@
       {
         "internalType": "GameType",
         "name": "_gameType",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "Claim",
@@ -30,7 +30,7 @@
         "type": "address"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -46,7 +46,7 @@
       {
         "internalType": "GameType",
         "name": "gameType_",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "Timestamp",
@@ -80,7 +80,7 @@
       {
         "internalType": "GameType",
         "name": "",
-        "type": "uint8"
+        "type": "uint32"
       }
     ],
     "name": "gameImpls",
@@ -99,7 +99,7 @@
       {
         "internalType": "GameType",
         "name": "_gameType",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "Claim",
@@ -133,7 +133,7 @@
       {
         "internalType": "GameType",
         "name": "_gameType",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "Claim",
@@ -155,6 +155,25 @@
       }
     ],
     "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "GameType",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "name": "initBonds",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -195,7 +214,7 @@
       {
         "internalType": "GameType",
         "name": "_gameType",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "internalType": "contract IDisputeGame",
@@ -204,6 +223,24 @@
       }
     ],
     "name": "setImplementation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "GameType",
+        "name": "_gameType",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_initBond",
+        "type": "uint256"
+      }
+    ],
+    "name": "setInitBond",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -247,7 +284,7 @@
         "indexed": true,
         "internalType": "GameType",
         "name": "gameType",
-        "type": "uint8"
+        "type": "uint32"
       },
       {
         "indexed": true,
@@ -272,10 +309,29 @@
         "indexed": true,
         "internalType": "GameType",
         "name": "gameType",
-        "type": "uint8"
+        "type": "uint32"
       }
     ],
     "name": "ImplementationSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "GameType",
+        "name": "gameType",
+        "type": "uint32"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "newBond",
+        "type": "uint256"
+      }
+    ],
+    "name": "InitBondUpdated",
     "type": "event"
   },
   {
@@ -322,11 +378,16 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "InsufficientBond",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "GameType",
         "name": "gameType",
-        "type": "uint8"
+        "type": "uint32"
       }
     ],
     "name": "NoImplementation",

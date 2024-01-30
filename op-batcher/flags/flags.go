@@ -8,9 +8,10 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-batcher/compressor"
 	opservice "github.com/ethereum-optimism/optimism/op-service"
+	openum "github.com/ethereum-optimism/optimism/op-service/enum"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -82,6 +83,22 @@ var (
 		Value:   0,
 		EnvVars: prefixEnvVars("BATCH_TYPE"),
 	}
+	DataAvailabilityTypeFlag = &cli.GenericFlag{
+		Name: "data-availability-type",
+		Usage: "The data availability type to use for submitting batches to the L1. Valid options: " +
+			openum.EnumString(DataAvailabilityTypes),
+		Value: func() *DataAvailabilityType {
+			out := CalldataType
+			return &out
+		}(),
+		EnvVars: prefixEnvVars("DATA_AVAILABILITY_TYPE"),
+	}
+	ActiveSequencerCheckDurationFlag = &cli.DurationFlag{
+		Name:    "active-sequencer-check-duration",
+		Usage:   "The duration between checks to determine the active sequencer endpoint. ",
+		Value:   2 * time.Minute,
+		EnvVars: prefixEnvVars("ACTIVE_SEQUENCER_CHECK_DURATION"),
+	}
 	// Legacy Flags
 	SequencerHDPathFlag = txmgr.SequencerHDPathFlag
 )
@@ -101,6 +118,8 @@ var optionalFlags = []cli.Flag{
 	StoppedFlag,
 	SequencerHDPathFlag,
 	BatchTypeFlag,
+	DataAvailabilityTypeFlag,
+	ActiveSequencerCheckDurationFlag,
 }
 
 func init() {

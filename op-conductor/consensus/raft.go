@@ -83,7 +83,7 @@ func NewRaftConsensus(log log.Logger, serverID, serverAddr, storageDir string, b
 		return nil, errors.Wrap(err, "failed to create raft")
 	}
 
-	// If boostrap = true, start raft in bootstrap mode, this will allow the current node to elect itself as leader when there's no other participants
+	// If bootstrap = true, start raft in bootstrap mode, this will allow the current node to elect itself as leader when there's no other participants
 	// and allow other nodes to join the cluster.
 	if bootstrap {
 		cfg := raft.Configuration{
@@ -144,6 +144,12 @@ func (rc *RaftConsensus) Leader() bool {
 	return id == rc.serverID
 }
 
+// LeaderWithID implements Consensus, it returns the leader's server ID and address.
+func (rc *RaftConsensus) LeaderWithID() (string, string) {
+	addr, id := rc.r.LeaderWithID()
+	return string(id), string(addr)
+}
+
 // LeaderCh implements Consensus, it returns a channel that will be notified when leadership status changes (true = leader, false = follower).
 func (rc *RaftConsensus) LeaderCh() <-chan bool {
 	return rc.r.LeaderCh()
@@ -196,31 +202,22 @@ func (rc *RaftConsensus) Shutdown() error {
 }
 
 // CommitUnsafePayload implements Consensus, it commits latest unsafe payload to the cluster FSM.
-func (rc *RaftConsensus) CommitUnsafePayload(payload eth.ExecutionPayload) error {
-	blockVersion := eth.BlockV1
-	if rc.rollupCfg.IsCanyon(uint64(payload.Timestamp)) {
-		blockVersion = eth.BlockV2
-	}
-
-	data := unsafeHeadData{
-		version: blockVersion,
-		payload: payload,
-	}
-
+func (rc *RaftConsensus) CommitUnsafePayload(payload *eth.ExecutionPayloadEnvelope) error {
 	var buf bytes.Buffer
-	if _, err := data.MarshalSSZ(&buf); err != nil {
-		return errors.Wrap(err, "failed to marshal unsafe head data")
+	if _, err := payload.MarshalSSZ(&buf); err != nil {
+		return errors.Wrap(err, "failed to marshal payload envelope")
 	}
 
 	f := rc.r.Apply(buf.Bytes(), defaultTimeout)
 	if err := f.Error(); err != nil {
-		return errors.Wrap(err, "failed to apply unsafe head data")
+		return errors.Wrap(err, "failed to apply payload envelope")
 	}
 
 	return nil
 }
 
 // LatestUnsafePayload implements Consensus, it returns the latest unsafe payload from FSM.
-func (rc *RaftConsensus) LatestUnsafePayload() eth.ExecutionPayload {
-	return rc.unsafeTracker.UnsafeHead()
+func (rc *RaftConsensus) LatestUnsafePayload() *eth.ExecutionPayloadEnvelope {
+	payload := rc.unsafeTracker.UnsafeHead()
+	return payload
 }

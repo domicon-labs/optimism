@@ -10,6 +10,7 @@ import (
 	openum "github.com/ethereum-optimism/optimism/op-service/enum"
 	opflags "github.com/ethereum-optimism/optimism/op-service/flags"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum-optimism/optimism/op-service/sources"
 )
 
@@ -42,6 +43,26 @@ var (
 		Destination: new(string),
 	}
 	/* Optional Flags */
+	BeaconAddr = &cli.StringFlag{
+		Name:     "l1.beacon",
+		Usage:    "Address of L1 Beacon-node HTTP endpoint to use.",
+		Required: false,
+		EnvVars:  prefixEnvVars("L1_BEACON"),
+	}
+	BeaconCheckIgnore = &cli.BoolFlag{
+		Name:     "l1.beacon.ignore",
+		Usage:    "When false, halts op-node startup if the healthcheck to the Beacon-node endpoint fails.",
+		Required: false,
+		Value:    false,
+		EnvVars:  prefixEnvVars("L1_BEACON_IGNORE"),
+	}
+	BeaconFetchAllSidecars = &cli.BoolFlag{
+		Name:     "l1.beacon.fetch-all-sidecars",
+		Usage:    "If true, all sidecars are fetched and filtered locally. Workaround for buggy Beacon nodes.",
+		Required: false,
+		Value:    false,
+		EnvVars:  prefixEnvVars("L1_BEACON_FETCH_ALL_SIDECARS"),
+	}
 	SyncModeFlag = &cli.GenericFlag{
 		Name:    "syncmode",
 		Usage:   fmt.Sprintf("IN DEVELOPMENT: Options are: %s", openum.EnumString(sync.ModeStrings)),
@@ -176,23 +197,6 @@ var (
 		Value:   7300,
 		EnvVars: prefixEnvVars("METRICS_PORT"),
 	}
-	PprofEnabledFlag = &cli.BoolFlag{
-		Name:    "pprof.enabled",
-		Usage:   "Enable the pprof server",
-		EnvVars: prefixEnvVars("PPROF_ENABLED"),
-	}
-	PprofAddrFlag = &cli.StringFlag{
-		Name:    "pprof.addr",
-		Usage:   "pprof listening address",
-		Value:   "0.0.0.0", // TODO(CLI-4159): Switch to 127.0.0.1
-		EnvVars: prefixEnvVars("PPROF_ADDR"),
-	}
-	PprofPortFlag = &cli.IntFlag{
-		Name:    "pprof.port",
-		Usage:   "pprof listening port",
-		Value:   6060,
-		EnvVars: prefixEnvVars("PPROF_PORT"),
-	}
 	SnapshotLog = &cli.StringFlag{
 		Name:    "snapshotlog.file",
 		Usage:   "Path to the snapshot log file",
@@ -259,6 +263,24 @@ var (
 		EnvVars: prefixEnvVars("L2_BACKUP_UNSAFE_SYNC_RPC_TRUST_RPC"),
 		Hidden:  true,
 	}
+	ConductorEnabledFlag = &cli.BoolFlag{
+		Name:    "conductor.enabled",
+		Usage:   "Enable the conductor service",
+		EnvVars: prefixEnvVars("CONDUCTOR_ENABLED"),
+		Value:   false,
+	}
+	ConductorRpcFlag = &cli.StringFlag{
+		Name:    "conductor.rpc",
+		Usage:   "Conductor service rpc endpoint",
+		EnvVars: prefixEnvVars("CONDUCTOR_RPC"),
+		Value:   "http://127.0.0.1:8547",
+	}
+	ConductorRpcTimeoutFlag = &cli.DurationFlag{
+		Name:    "conductor.rpc-timeout",
+		Usage:   "Conductor service rpc timeout",
+		EnvVars: prefixEnvVars("CONDUCTOR_RPC_TIMEOUT"),
+		Value:   time.Second * 1,
+	}
 )
 
 var requiredFlags = []cli.Flag{
@@ -268,6 +290,9 @@ var requiredFlags = []cli.Flag{
 }
 
 var optionalFlags = []cli.Flag{
+	BeaconAddr,
+	BeaconCheckIgnore,
+	BeaconFetchAllSidecars,
 	SyncModeFlag,
 	RPCListenAddr,
 	RPCListenPort,
@@ -289,9 +314,6 @@ var optionalFlags = []cli.Flag{
 	MetricsEnabledFlag,
 	MetricsAddrFlag,
 	MetricsPortFlag,
-	PprofEnabledFlag,
-	PprofAddrFlag,
-	PprofPortFlag,
 	SnapshotLog,
 	HeartbeatEnabledFlag,
 	HeartbeatMonikerFlag,
@@ -299,6 +321,9 @@ var optionalFlags = []cli.Flag{
 	RollupHalt,
 	RollupLoadProtocolVersions,
 	L1RethDBPath,
+	ConductorEnabledFlag,
+	ConductorRpcFlag,
+	ConductorRpcTimeoutFlag,
 }
 
 var DeprecatedFlags = []cli.Flag{
@@ -317,6 +342,7 @@ func init() {
 	DeprecatedFlags = append(DeprecatedFlags, deprecatedP2PFlags(EnvVarPrefix)...)
 	optionalFlags = append(optionalFlags, P2PFlags(EnvVarPrefix)...)
 	optionalFlags = append(optionalFlags, oplog.CLIFlags(EnvVarPrefix)...)
+	optionalFlags = append(optionalFlags, oppprof.CLIFlags(EnvVarPrefix)...)
 	optionalFlags = append(optionalFlags, DeprecatedFlags...)
 	optionalFlags = append(optionalFlags, opflags.CLIFlags(EnvVarPrefix)...)
 	Flags = append(requiredFlags, optionalFlags...)

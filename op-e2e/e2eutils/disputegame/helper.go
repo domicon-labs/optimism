@@ -12,9 +12,9 @@ import (
 	"github.com/ethereum-optimism/optimism/op-chain-ops/deployer"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/outputs"
+	faultTypes "github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
-	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/l2oo"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/transactions"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -30,9 +30,9 @@ import (
 )
 
 const (
-	cannonGameType    uint8 = 0
-	alphabetGameType  uint8 = 255
-	alphabetGameDepth       = 4
+	cannonGameType    uint32 = 0
+	alphabetGameType  uint32 = 255
+	alphabetGameDepth        = 4
 )
 
 type Status uint8
@@ -75,7 +75,6 @@ type FactoryHelper struct {
 	opts        *bind.TransactOpts
 	factoryAddr common.Address
 	factory     *bindings.DisputeGameFactory
-	l2ooHelper  *l2oo.L2OOHelper
 }
 
 func NewFactoryHelper(t *testing.T, ctx context.Context, system DisputeSystem) *FactoryHelper {
@@ -99,7 +98,6 @@ func NewFactoryHelper(t *testing.T, ctx context.Context, system DisputeSystem) *
 		opts:        opts,
 		factory:     factory,
 		factoryAddr: factoryAddr,
-		l2ooHelper:  l2oo.NewL2OOHelperReadOnly(t, l1Deployments, client),
 	}
 }
 
@@ -138,7 +136,7 @@ func (h *FactoryHelper) StartOutputCannonGame(ctx context.Context, l2Node string
 	splitDepth, err := game.SplitDepth(&bind.CallOpts{Context: ctx})
 	h.require.NoError(err, "Failed to load split depth")
 	prestateProvider := outputs.NewPrestateProvider(ctx, logger, rollupClient, prestateBlock.Uint64())
-	provider := outputs.NewTraceProviderFromInputs(logger, prestateProvider, rollupClient, splitDepth.Uint64(), prestateBlock.Uint64(), poststateBlock.Uint64())
+	provider := outputs.NewTraceProviderFromInputs(logger, prestateProvider, rollupClient, faultTypes.Depth(splitDepth.Uint64()), prestateBlock.Uint64(), poststateBlock.Uint64())
 
 	return &OutputCannonGameHelper{
 		OutputGameHelper: OutputGameHelper{
@@ -190,7 +188,7 @@ func (h *FactoryHelper) StartOutputAlphabetGame(ctx context.Context, l2Node stri
 	splitDepth, err := game.SplitDepth(&bind.CallOpts{Context: ctx})
 	h.require.NoError(err, "Failed to load split depth")
 	prestateProvider := outputs.NewPrestateProvider(ctx, logger, rollupClient, prestateBlock.Uint64())
-	provider := outputs.NewTraceProviderFromInputs(logger, prestateProvider, rollupClient, splitDepth.Uint64(), prestateBlock.Uint64(), poststateBlock.Uint64())
+	provider := outputs.NewTraceProviderFromInputs(logger, prestateProvider, rollupClient, faultTypes.Depth(splitDepth.Uint64()), prestateBlock.Uint64(), poststateBlock.Uint64())
 
 	return &OutputAlphabetGameHelper{
 		OutputGameHelper: OutputGameHelper{
