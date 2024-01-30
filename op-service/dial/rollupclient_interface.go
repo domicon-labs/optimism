@@ -16,5 +16,6 @@ type RollupClientInterface interface {
 	RollupConfig(ctx context.Context) (*rollup.Config, error)
 	StartSequencer(ctx context.Context, unsafeHead common.Hash) error
 	SequencerActive(ctx context.Context) (bool, error)
+	FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error)
 	Close()
 }

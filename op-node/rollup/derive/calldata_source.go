@@ -23,22 +23,27 @@ type L1TransactionFetcher interface {
 	InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, types.Transactions, error)
 }
 
+type DomiconDAFetcher interface {
+	FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error)
+}
+
 // DataSourceFactory readers raw transactions from a given block & then filters for
 // batch submitter transactions.
 // This is not a stage in the pipeline, but a wrapper for another stage in the pipeline
 type DataSourceFactory struct {
-	log     log.Logger
-	dsCfg   DataSourceConfig
-	fetcher L1TransactionFetcher
+	log              log.Logger
+	dsCfg            DataSourceConfig
+	fetcher          L1TransactionFetcher
+	domiconDAFetcher DomiconDAFetcher
 }
 
-func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1TransactionFetcher) *DataSourceFactory {
-	return &DataSourceFactory{log: log, dsCfg: DataSourceConfig{l1Signer: cfg.L1Signer(), batchInboxAddress: cfg.BatchInboxAddress}, fetcher: fetcher}
+func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1TransactionFetcher, daFetcher DomiconDAFetcher) *DataSourceFactory {
+	return &DataSourceFactory{log: log, dsCfg: DataSourceConfig{l1Signer: cfg.L1Signer(), batchInboxAddress: cfg.BatchInboxAddress}, fetcher: fetcher, domiconDAFetcher: daFetcher}
 }
 
 // OpenData returns a DataIter. This struct implements the `Next` function.
 func (ds *DataSourceFactory) OpenData(ctx context.Context, id eth.BlockID, batcherAddr common.Address) DataIter {
-	return NewDataSource(ctx, ds.log, ds.dsCfg, ds.fetcher, id, batcherAddr)
+	return NewDataSource(ctx, ds.log, ds.dsCfg, ds.fetcher, id, batcherAddr, ds.domiconDAFetcher)
 }
 
 // DataSourceConfig regroups the mandatory rollup.Config fields needed for DataFromEVMTransactions.
@@ -65,7 +70,7 @@ type DataSource struct {
 
 // NewDataSource creates a new calldata source. It suppresses errors in fetching the L1 block if they occur.
 // If there is an error, it will attempt to fetch the result on the next call to `Next`.
-func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, block eth.BlockID, batcherAddr common.Address) DataIter {
+func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, block eth.BlockID, batcherAddr common.Address, domiconDAFetcher DomiconDAFetcher) DataIter {
 	_, txs, err := fetcher.InfoAndTxsByHash(ctx, block.Hash)
 
 	if err != nil {

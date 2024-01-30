@@ -16,6 +16,17 @@ type RollupClient struct {
 	rpc client.RPC
 }
 
+type RPCFileData struct {
+	Sender     common.Address `json:"sender"`
+	Submmiter  common.Address `json:"submmiter"`
+	Length     hexutil.Uint64 `json:"length"`
+	Index      hexutil.Uint64 `json:"index"`
+	Commitment hexutil.Bytes  `json:"commitment"`
+	Data       hexutil.Bytes  `json:"data"`
+	Sign       hexutil.Bytes  `json:"sign"`
+	TxHash     common.Hash    `json:"txhash"`
+}
+
 func NewRollupClient(rpc client.RPC) *RollupClient {
 	return &RollupClient{rpc}
 }
@@ -42,6 +53,13 @@ func (r *RollupClient) Version(ctx context.Context) (string, error) {
 	var output string
 	err := r.rpc.CallContext(ctx, &output, "optimism_version")
 	return output, err
+}
+
+func (r *RollupClient) FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error) {
+	log.Info("FileDataByHash", "hash", hash)
+	var rpcFileData RPCFileData
+	err := r.rpc.CallContext(ctx, &rpcFileData, "optimism_FileDataByHash", hash)
+	return rpcFileData.Data, err
 }
 
 func (r *RollupClient) StartSequencer(ctx context.Context, unsafeHead common.Hash) error {
