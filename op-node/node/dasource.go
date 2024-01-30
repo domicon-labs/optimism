@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/ethereum-optimism/optimism/op-service/dial"
@@ -18,15 +19,15 @@ type DaSource struct {
 	log             log.Logger
 }
 
-func NewDaSource(ctx context.Context, log log.Logger, cfg *DaSourceConfig) *DaSource {
+func NewDaSource(ctx context.Context, log log.Logger, cfg *DaSourceConfig) (*DaSource, error) {
 	nodesAddrRpc := make(map[string]common.Address)
 	l1Client, err := dial.DialEthClientWithTimeout(ctx, dial.DefaultDialTimeout, log, cfg.L1URL)
 	if err != nil {
-		return &DaSource{}
+		return &DaSource{}, fmt.Errorf("dial L1 failed", cfg.L1URL, err)
 	}
 	domiconNodesAbi, err := abi.JSON(strings.NewReader(domiconabi.DomiconNodes))
 	if err != nil {
-		return &DaSource{}
+		return &DaSource{}, err
 	}
 
 	l1DomiconNodesContract := bind.NewBoundContract(common.HexToAddress(cfg.L1DomiconNodesContract), domiconNodesAbi, l1Client, l1Client, nil)
@@ -34,15 +35,15 @@ func NewDaSource(ctx context.Context, log log.Logger, cfg *DaSourceConfig) *DaSo
 	bcNodeAddrs := new([]interface{})
 	err = l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeAddrs, "BROADCAST_NODES")
 	if err != nil {
-		return &DaSource{}
+		return &DaSource{}, fmt.Errorf("call L1DomiconNodesContract BROADCAST_NODES failed", err)
 	}
 	log.Info("selectBestNode", "addresses:", (*bcNodeAddrs)[0])
 	addrSli, ok := (*bcNodeAddrs)[0].([]common.Address)
 	if !ok {
-		return &DaSource{}
+		return &DaSource{}, fmt.Errorf("convert node address failed")
 	}
 	if len(addrSli) == 0 {
-		return &DaSource{}
+		return &DaSource{}, fmt.Errorf("There is no broadcast node")
 	}
 	log.Info("msg", "addrSli", addrSli)
 	var firstNodeRpc string = ""
@@ -65,14 +66,14 @@ func NewDaSource(ctx context.Context, log log.Logger, cfg *DaSourceConfig) *DaSo
 
 	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, log, firstNodeRpc)
 	if err != nil {
-		return &DaSource{}
+		return &DaSource{}, nil
 	}
 
 	return &DaSource{
 		workingNode:     domiconClient,
 		domiconNodesRpc: nodesAddrRpc,
 		log:             log,
-	}
+	}, nil
 }
 
 func (d *DaSource) TryNextNode(ctx context.Context, rpc string) (*dial.StaticL2RollupProvider, error) {
@@ -80,6 +81,7 @@ func (d *DaSource) TryNextNode(ctx context.Context, rpc string) (*dial.StaticL2R
 }
 
 func (d *DaSource) FileDataByHash(ctx context.Context, hash common.Hash) ([]byte, error) {
+	log.Info("hddtest FileDataByHash", "hash", hash)
 	if d.workingNode != nil {
 		domiconClient, _ := d.workingNode.RollupClient(ctx)
 		da, err := domiconClient.FileDataByHash(ctx, hash)

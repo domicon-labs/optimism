@@ -91,8 +91,8 @@ func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, 
 	} else {
 		return &DataSource{
 			open: true,
-			//data: DataFromEVMTransactions(dsCfg, batcherAddr, txs, log.New("origin", block)),
-			data: DataFromDomiconTransactions(dsCfg, batcherAddr, txs, log.New("origin", block), domiconDAFetcher),
+			data: DataFromEVMTransactions(dsCfg, batcherAddr, txs, log.New("origin", block)),
+			//data: DataFromDomiconTransactions(dsCfg, batcherAddr, txs, log.New("origin", block), domiconDAFetcher),
 		}
 	}
 }
@@ -104,8 +104,8 @@ func (ds *DataSource) Next(ctx context.Context) (eth.Data, error) {
 	if !ds.open {
 		if _, txs, err := ds.fetcher.InfoAndTxsByHash(ctx, ds.id.Hash); err == nil {
 			ds.open = true
-			//ds.data = DataFromEVMTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id))
-			ds.data = DataFromDomiconTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id), ds.domiconDAFetcher)
+			ds.data = DataFromEVMTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id))
+			//ds.data = DataFromDomiconTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id), ds.domiconDAFetcher)
 		} else if errors.Is(err, ethereum.NotFound) {
 			return nil, NewResetError(fmt.Errorf("failed to open calldata source: %w", err))
 		} else {
@@ -145,6 +145,7 @@ func DataFromEVMTransactions(dsCfg DataSourceConfig, batcherAddr common.Address,
 }
 
 func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, log log.Logger, domiconDAFetcher DomiconDAFetcher) []eth.Data {
+	log.Info("hddtest DataFromDomiconTransactions")
 	var out []eth.Data
 	for j, tx := range txs {
 		if to := tx.To(); to != nil && *to == dsCfg.batchInboxAddress {
