@@ -6,25 +6,30 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	_ "net/http/pprof"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-batcher/rpc"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	txmgr "github.com/ethereum-optimism/optimism/op-service/batcher-txmgr"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/httputil"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
-	"github.com/ethereum-optimism/optimism/op-service/txmgr"
+	domiconabi "github.com/ethereum-optimism/optimism/packages/domicon-abi"
 )
 
 var (
@@ -45,6 +50,7 @@ type BatcherService struct {
 	L1Client         *ethclient.Client
 	EndpointProvider dial.L2EndpointProvider
 	TxManager        txmgr.TxManager
+	DomiconClient    dial.RollupProvider
 
 	BatcherConfig
 
@@ -65,7 +71,8 @@ type BatcherService struct {
 
 	stopped atomic.Bool
 
-	NotSubmittingOnStart bool
+	NotSubmittingOnStart     bool
+	DomiconBroadcastNodeAddr *common.Address
 }
 
 // BatcherServiceFromCLIConfig creates a new BatcherService from a CLIConfig.
@@ -138,6 +145,32 @@ func (bs *BatcherService) initRPCClients(ctx context.Context, cfg *CLIConfig) er
 		return fmt.Errorf("failed to build L2 endpoint provider: %w", err)
 	}
 	bs.EndpointProvider = endpointProvider
+	var bestNodeRpc string
+	var bestNodeAddr common.Address
+	if len(strings.TrimSpace(cfg.DomiconNodeRpc)) == 0 || len(strings.TrimSpace(cfg.DomiconNodeAddr)) == 0 {
+		// get broadcast node from l1DomiconNodes contract
+		log.Info("there is no specifed rollup rpc url, batcher will get rpc url from l1DomiconNodes contract")
+		domiconNodesAbi, err := abi.JSON(strings.NewReader(domiconabi.DomiconNodes))
+		if err != nil {
+			return fmt.Errorf("parse DomiconNodes abi failed: %w", err)
+		}
+		l1DomiconNodesContractAddr := common.HexToAddress(cfg.L1DomiconNodesContractAddr)
+		domiconNodesContract := bind.NewBoundContract(l1DomiconNodesContractAddr, domiconNodesAbi, l1Client, l1Client, nil)
+		bestNodeRpc, bestNodeAddr, err = selectBestNode(domiconNodesContract)
+		if err != nil {
+			return fmt.Errorf("selectBestNode failed: %w", err)
+		}
+	} else {
+		bestNodeRpc = strings.TrimSpace(cfg.DomiconNodeRpc)
+		bestNodeAddr = common.HexToAddress(strings.TrimSpace(cfg.DomiconNodeAddr))
+	}
+	log.Info("domicon broadcast node", "node rpc", bestNodeRpc, "node addr", bestNodeAddr)
+	domiconClient, err := dial.NewStaticL2RollupProvider(ctx, bs.Log, bestNodeRpc)
+	if err != nil {
+		return fmt.Errorf("failed to new domiconprovider: %w", err)
+	}
+	bs.DomiconClient = domiconClient
+	bs.DomiconBroadcastNodeAddr = &bestNodeAddr
 
 	return nil
 }
@@ -191,7 +224,7 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 }
 
 func (bs *BatcherService) initTxManager(cfg *CLIConfig) error {
-	txManager, err := txmgr.NewSimpleTxManager("batcher", bs.Log, bs.Metrics, cfg.TxMgrConfig)
+	txManager, err := txmgr.NewSimpleTxManager("batcher", bs.Log, bs.Metrics, bs.DomiconClient, cfg.TxMgrConfig, cfg.KzgSRSFlag, cfg.CommitContractAddr)
 	if err != nil {
 		return err
 	}
@@ -234,14 +267,15 @@ func (bs *BatcherService) initMetricsServer(cfg *CLIConfig) error {
 
 func (bs *BatcherService) initDriver() {
 	bs.driver = NewBatchSubmitter(DriverSetup{
-		Log:              bs.Log,
-		Metr:             bs.Metrics,
-		RollupConfig:     bs.RollupConfig,
-		Config:           bs.BatcherConfig,
-		Txmgr:            bs.TxManager,
-		L1Client:         bs.L1Client,
-		EndpointProvider: bs.EndpointProvider,
-		ChannelConfig:    bs.ChannelConfig,
+		Log:                      bs.Log,
+		Metr:                     bs.Metrics,
+		RollupConfig:             bs.RollupConfig,
+		Config:                   bs.BatcherConfig,
+		Txmgr:                    bs.TxManager,
+		L1Client:                 bs.L1Client,
+		EndpointProvider:         bs.EndpointProvider,
+		ChannelConfig:            bs.ChannelConfig,
+		DomiconBroadcastNodeAddr: bs.DomiconBroadcastNodeAddr,
 	})
 }
 
@@ -337,6 +371,9 @@ func (bs *BatcherService) Stop(ctx context.Context) error {
 		bs.EndpointProvider.Close()
 	}
 
+	if bs.DomiconClient != nil {
+		bs.DomiconClient.Close()
+	}
 	if result == nil {
 		bs.stopped.Store(true)
 		bs.Log.Info("Batch Submitter stopped")
@@ -350,4 +387,86 @@ var _ cliapp.Lifecycle = (*BatcherService)(nil)
 // to start/stop/restart the batch-submission work, for use in testing.
 func (bs *BatcherService) Driver() rpc.BatcherDriver {
 	return bs.driver
+}
+
+func selectBestNode(l1DomiconNodesContract *bind.BoundContract) (string, common.Address, error) {
+	// 1. get all node address
+	bcNodeAddrs := new([]interface{})
+	err := l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeAddrs, "BROADCAST_NODES")
+	if err != nil {
+		return "", common.HexToAddress(""), err
+	}
+	log.Info("selectBestNode", "addresses:", (*bcNodeAddrs)[0])
+	addrSli, ok := (*bcNodeAddrs)[0].([]common.Address)
+	if !ok {
+		return "", common.HexToAddress(""), errors.New("broadcast node address error format")
+	}
+
+	// 2. ensure broadcast node
+	// 3. get all broadcast node rpc url
+	nodesAddrRpc := make(map[string]common.Address)
+	log.Info("msg", "addrSli", addrSli)
+	for i, addr := range addrSli {
+		if i > 20 {
+			break
+		}
+		log.Info("msg", "addr", addr)
+		bcNodeInfo := new([]interface{})
+		l1DomiconNodesContract.Call(&bind.CallOpts{}, bcNodeInfo, "broadcastingNodes", addr)
+		nodeAddr, _ := (*bcNodeInfo)[0].(common.Address)
+		nodeRpc, _ := (*bcNodeInfo)[1].(string)
+		log.Info("bcNodeInfo", "nodeAddr", nodeAddr, "nodeRpc", nodeRpc)
+		nodesAddrRpc[nodeRpc] = nodeAddr
+	}
+	// 4. select one broadcast node which network state is best
+	ch := make(chan struct {
+		duration time.Duration
+		url      string
+	}, len(nodesAddrRpc))
+	for rpcUrl, _ := range nodesAddrRpc {
+		go testRPCLatency(rpcUrl, ch)
+	}
+	var fastestUrl string
+	var minDuration time.Duration = time.Minute * 5
+	for i := 0; i < len(nodesAddrRpc); i++ {
+		item := <-ch
+		if item.duration == time.Duration(0) {
+			continue
+		}
+		if item.duration < minDuration {
+			minDuration = item.duration
+			fastestUrl = item.url
+		}
+	}
+	// 5. return its rpc url and node address
+	return fastestUrl, nodesAddrRpc[fastestUrl], nil
+}
+
+func testRPCLatency(url string, ch chan<- struct {
+	duration time.Duration
+	url      string
+}) {
+	startTime := time.Now()
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Info("testRPCLatency", "url", url, "error", err)
+		ch <- struct {
+			duration time.Duration
+			url      string
+		}{
+			time.Duration(0),
+			url,
+		}
+		return
+	}
+	defer resp.Body.Close()
+	duration := time.Since(startTime)
+	log.Info("testRPCLatency", "url", url, "duration", duration)
+	ch <- struct {
+		duration time.Duration
+		url      string
+	}{
+		duration,
+		url,
+	}
 }

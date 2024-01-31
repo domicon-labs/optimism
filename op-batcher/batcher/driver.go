@@ -10,16 +10,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	txmgr "github.com/ethereum-optimism/optimism/op-service/batcher-txmgr"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
 var ErrBatcherNotRunning = errors.New("batcher is not running")
@@ -38,14 +38,15 @@ type RollupClient interface {
 
 // DriverSetup is the collection of input/output interfaces and configuration that the driver operates on.
 type DriverSetup struct {
-	Log              log.Logger
-	Metr             metrics.Metricer
-	RollupConfig     *rollup.Config
-	Config           BatcherConfig
-	Txmgr            txmgr.TxManager
-	L1Client         L1Client
-	EndpointProvider dial.L2EndpointProvider
-	ChannelConfig    ChannelConfig
+	Log                      log.Logger
+	Metr                     metrics.Metricer
+	RollupConfig             *rollup.Config
+	Config                   BatcherConfig
+	Txmgr                    txmgr.TxManager
+	L1Client                 L1Client
+	EndpointProvider         dial.L2EndpointProvider
+	ChannelConfig            ChannelConfig
+	DomiconBroadcastNodeAddr *common.Address
 }
 
 // BatchSubmitter encapsulates a service responsible for submitting L2 tx
@@ -359,16 +360,11 @@ func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[t
 func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txData], receiptsCh chan txmgr.TxReceipt[txData]) {
 	// Do the gas estimation offline. A value of 0 will cause the [txmgr] to estimate the gas limit.
 	data := txdata.Bytes()
-	intrinsicGas, err := core.IntrinsicGas(data, nil, false, true, true, false)
-	if err != nil {
-		l.Log.Error("Failed to calculate intrinsic gas", "error", err)
-		return
-	}
 
+	//submitterAddr := common.HexToAddress("0x84e6e65663117A2Fc12bAac9c4c1Ee406b6090Be")
 	candidate := txmgr.TxCandidate{
-		To:       &l.RollupConfig.BatchInboxAddress,
-		TxData:   data,
-		GasLimit: intrinsicGas,
+		To:     l.DriverSetup.DomiconBroadcastNodeAddr,
+		TxData: data,
 	}
 	queue.Send(txdata, candidate, receiptsCh)
 }

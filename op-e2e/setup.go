@@ -56,6 +56,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/driver"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
 	l2os "github.com/ethereum-optimism/optimism/op-proposer/proposer"
+	batcher_txmgr "github.com/ethereum-optimism/optimism/op-service/batcher-txmgr"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
 	"github.com/ethereum-optimism/optimism/op-service/clock"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -71,6 +72,20 @@ var (
 
 func newTxMgrConfig(l1Addr string, privKey *ecdsa.PrivateKey) txmgr.CLIConfig {
 	return txmgr.CLIConfig{
+		L1RPCURL:                  l1Addr,
+		PrivateKey:                hexPriv(privKey),
+		NumConfirmations:          1,
+		SafeAbortNonceTooLowCount: 3,
+		FeeLimitMultiplier:        5,
+		ResubmissionTimeout:       3 * time.Second,
+		ReceiptQueryInterval:      50 * time.Millisecond,
+		NetworkTimeout:            2 * time.Second,
+		TxNotInMempoolTimeout:     2 * time.Minute,
+	}
+}
+
+func newBatcherTxMgrConfig(l1Addr string, privKey *ecdsa.PrivateKey) batcher_txmgr.CLIConfig {
+	return batcher_txmgr.CLIConfig{
 		L1RPCURL:                  l1Addr,
 		PrivateKey:                hexPriv(privKey),
 		NumConfirmations:          1,
@@ -769,7 +784,7 @@ func (cfg SystemConfig) Start(t *testing.T, _opts ...SystemConfigOption) (*Syste
 		},
 		SubSafetyMargin: 4,
 		PollInterval:    50 * time.Millisecond,
-		TxMgrConfig:     newTxMgrConfig(sys.EthInstances["l1"].WSEndpoint(), cfg.Secrets.Batcher),
+		TxMgrConfig:     newBatcherTxMgrConfig(sys.EthInstances["l1"].WSEndpoint(), cfg.Secrets.Batcher),
 		LogConfig: oplog.CLIConfig{
 			Level:  log.LvlInfo,
 			Format: oplog.FormatText,
