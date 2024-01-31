@@ -57,6 +57,9 @@ var DevAccounts = []common.Address{
 	common.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"),
 	// Deployer of create2 deterministic proxy https://github.com/Arachnid/deterministic-deployment-proxy
 	common.HexToAddress("0x3fab184622dc19b6109349b94811493bf2a45362"),
+
+	// public test account, private key: 0xbe82e5f46ee70dbf3f0f27680a06dd71f45b42aa02034c13f7e0b85eb939298c
+	common.HexToAddress("0x16f0E85315c5aa39D684390BD75a431850e24A7C"),
 }
 
 // The devBalance is the amount of wei that a dev account is funded with.

@@ -25,11 +25,15 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 	}
 
 	db := state.NewMemoryStateDB(genspec)
+	config.FundDevAccounts = true
 	if config.FundDevAccounts {
 		log.Info("Funding developer accounts in L2 genesis")
 		FundDevAccounts(db)
 	}
-
+	log.Info("----------------------------Action-------------------------------")
+	log.Info("test account addr 0x16f0E85315c5aa39D684390BD75a431850e24A7C")
+	log.Info("test account private key 0xbe82e5f46ee70dbf3f0f27680a06dd71f45b42aa02034c13f7e0b85eb939298c")
+	log.Info("----------------------------Action-------------------------------")
 	SetPrecompileBalances(db)
 
 	storage, err := NewL2StorageConfig(config, l1StartBlock)
