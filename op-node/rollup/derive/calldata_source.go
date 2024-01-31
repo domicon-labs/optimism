@@ -22,6 +22,7 @@ type DataIter interface {
 
 type L1TransactionFetcher interface {
 	InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, types.Transactions, error)
+	FetchReceipts(ctx context.Context, blockHash common.Hash) (eth.BlockInfo, types.Receipts, error)
 }
 
 type DomiconDAFetcher interface {
@@ -74,8 +75,8 @@ type DataSource struct {
 // If there is an error, it will attempt to fetch the result on the next call to `Next`.
 func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, block eth.BlockID, batcherAddr common.Address, domiconDAFetcher DomiconDAFetcher) DataIter {
 	_, txs, err := fetcher.InfoAndTxsByHash(ctx, block.Hash)
-
-	if err != nil {
+	_, receiptSli, errRecp := fetcher.FetchReceipts(ctx, block.Hash)
+	if err != nil || errRecp != nil {
 		return &DataSource{
 			open:             false,
 			id:               block,
@@ -89,7 +90,7 @@ func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, 
 		return &DataSource{
 			open: true,
 			//data: DataFromEVMTransactions(dsCfg, batcherAddr, txs, log.New("origin", block)),
-			data: DataFromDomiconTransactions(dsCfg, batcherAddr, txs, log.New("origin", block), domiconDAFetcher),
+			data: DataFromDomiconTransactions(dsCfg, batcherAddr, txs, log.New("origin", block), domiconDAFetcher, receiptSli),
 		}
 	}
 }
@@ -99,9 +100,11 @@ func NewDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, 
 // otherwise it returns a temporary error if fetching the block returns an error.
 func (ds *DataSource) Next(ctx context.Context) (eth.Data, error) {
 	if !ds.open {
-		if _, txs, err := ds.fetcher.InfoAndTxsByHash(ctx, ds.id.Hash); err == nil {
+		_, txs, err := ds.fetcher.InfoAndTxsByHash(ctx, ds.id.Hash)
+		_, receiptSli, errRecp := ds.fetcher.FetchReceipts(ctx, ds.id.Hash)
+		if err == nil && errRecp == nil {
 			ds.open = true
-			ds.data = DataFromDomiconTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id), ds.domiconDAFetcher)
+			ds.data = DataFromDomiconTransactions(ds.dsCfg, ds.batcherAddr, txs, log.New("origin", ds.id), ds.domiconDAFetcher, receiptSli)
 		} else if errors.Is(err, ethereum.NotFound) {
 			return nil, NewResetError(fmt.Errorf("failed to open calldata source: %w", err))
 		} else {
@@ -140,19 +143,23 @@ func DataFromEVMTransactions(dsCfg DataSourceConfig, batcherAddr common.Address,
 	return out
 }
 
-func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, log log.Logger, domiconDAFetcher DomiconDAFetcher) []eth.Data {
+func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, log log.Logger, domiconDAFetcher DomiconDAFetcher, receipts types.Receipts) []eth.Data {
 	log.Info("hddtest DataFromDomiconTransactions")
 	var out []eth.Data
 	for j, tx := range txs {
 		if to := tx.To(); to != nil && *to == dsCfg.batchInboxAddress {
-			// todo check tx result
+			// check tx receipt status
+			if !CheckTxReceiptStatus(tx.Hash(), receipts) {
+				log.Warn("CheckTxReceiptStatus", "tx hash", tx.Hash(), "receipt status", types.ReceiptStatusFailed)
+				continue
+			}
+			// check tx result
 			inputData := hexutil.Encode(tx.Data())
-			log.Info("DataFromDomiconTransactions", "inputData len", len(inputData), "inputData string format", inputData)
+			log.Info("DataFromDomiconTransactions", "inputData len", len(inputData))
 			if len(inputData) != 842 {
 				log.Warn("tx inputData length is incorrect")
 				continue
 			}
-
 			userAddrTmp := inputData[226:266]
 			userAddr := common.HexToAddress("0x" + userAddrTmp)
 			log.Info("DataFromDomiconTransactions", "userAddr parsed from tx input is", userAddr, "batcherAddr", batcherAddr)
@@ -172,4 +179,15 @@ func DataFromDomiconTransactions(dsCfg DataSourceConfig, batcherAddr common.Addr
 		}
 	}
 	return out
+}
+
+func CheckTxReceiptStatus(txHash common.Hash, receipts types.Receipts) bool {
+	for _, r := range receipts {
+		if r.TxHash == txHash {
+			if r.Status == types.ReceiptStatusSuccessful {
+				return true
+			}
+		}
+	}
+	return false
 }
