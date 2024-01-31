@@ -20,7 +20,7 @@ reqenv "GS_SEQUENCER_ADDRESS"
 reqenv "L1_RPC_URL"
 
 # Get the finalized block timestamp and hash
-block=$(cast block finalized --rpc-url "$L1_RPC_URL")
+block=$(cast block --rpc-url "$L1_RPC_URL")
 timestamp=$(echo "$block" | awk '/timestamp/ { print $2 }')
 blockhash=$(echo "$block" | awk '/hash/ { print $2 }')
 
@@ -42,7 +42,7 @@ config=$(cat << EOL
   "channelTimeout": 300,
 
   "p2pSequencerAddress": "$GS_SEQUENCER_ADDRESS",
-  "batchInboxAddress": "0xff00000000000000000000000000000000042069",
+  "batchInboxAddress": "0x5f5cf46cf14d725311b9461b01bd22ceebf75df3",
   "batchSenderAddress": "$GS_BATCHER_ADDRESS",
 
   "l2OutputOracleSubmissionInterval": 120,
