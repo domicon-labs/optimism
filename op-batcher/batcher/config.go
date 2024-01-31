@@ -10,11 +10,11 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-batcher/compressor"
 	"github.com/ethereum-optimism/optimism/op-batcher/flags"
+	txmgr "github.com/ethereum-optimism/optimism/op-service/batcher-txmgr"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
-	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
 type CLIConfig struct {
@@ -26,6 +26,12 @@ type CLIConfig struct {
 
 	// RollupRpc is the HTTP provider URL for the L2 rollup node. A comma-separated list enables the active L2 provider. Such a list needs to match the number of L2EthRpcs provided.
 	RollupRpc string
+
+	// DomiconNodeRpc is the HTTP provider URL for the domicon node.
+	DomiconNodeRpc string
+
+	//DomiconNodeAddr is the address of the domicon node
+	DomiconNodeAddr string
 
 	// MaxChannelDuration is the maximum duration (in #L1-blocks) to keep a
 	// channel open. This allows to more eagerly send batcher transactions
@@ -46,6 +52,12 @@ type CLIConfig struct {
 	// and creating a new batch.
 	PollInterval time.Duration
 
+	// KzgSRSFlag is the path to kzg srs file
+	KzgSRSFlag string
+
+	// CommitContractAddr is the address of L1DomiconCommitmentContract (to get index)
+	CommitContractAddr string
+
 	// MaxPendingTransactions is the maximum number of concurrent pending
 	// transactions sent to the transaction manager (0 == no limit).
 	MaxPendingTransactions uint64
@@ -56,6 +68,9 @@ type CLIConfig struct {
 	Stopped bool
 
 	BatchType uint
+
+	// L1DomiconNodesContractAddr is the address of L1DomiconNodesContract
+	L1DomiconNodesContractAddr string
 
 	TxMgrConfig      txmgr.CLIConfig
 	LogConfig        oplog.CLIConfig
@@ -107,11 +122,16 @@ func (c *CLIConfig) Check() error {
 func NewConfig(ctx *cli.Context) *CLIConfig {
 	return &CLIConfig{
 		/* Required Flags */
-		L1EthRpc:        ctx.String(flags.L1EthRpcFlag.Name),
-		L2EthRpc:        ctx.String(flags.L2EthRpcFlag.Name),
-		RollupRpc:       ctx.String(flags.RollupRpcFlag.Name),
-		SubSafetyMargin: ctx.Uint64(flags.SubSafetyMarginFlag.Name),
-		PollInterval:    ctx.Duration(flags.PollIntervalFlag.Name),
+		L1EthRpc:                   ctx.String(flags.L1EthRpcFlag.Name),
+		L2EthRpc:                   ctx.String(flags.L2EthRpcFlag.Name),
+		DomiconNodeRpc:             ctx.String(flags.DomiconNodeRpcFlag.Name),
+		DomiconNodeAddr:            ctx.String(flags.DomiconNodeAddrFlag.Name),
+		RollupRpc:                  ctx.String(flags.RollupRpcFlag.Name),
+		SubSafetyMargin:            ctx.Uint64(flags.SubSafetyMarginFlag.Name),
+		PollInterval:               ctx.Duration(flags.PollIntervalFlag.Name),
+		KzgSRSFlag:                 ctx.String(flags.KzgSRSFlag.Name),
+		CommitContractAddr:         ctx.String(flags.L1DomiconCommitmentContract.Name),
+		L1DomiconNodesContractAddr: ctx.String(flags.L1DomiconNodesContract.Name),
 
 		/* Optional Flags */
 		MaxPendingTransactions: ctx.Uint64(flags.MaxPendingTransactionsFlag.Name),
