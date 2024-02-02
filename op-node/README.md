@@ -83,3 +83,21 @@ $ op-node genesis devnet-l2 \
    --deploy-config $CONTRACTS_BEDROCK/deploy-config \
    --rpc-url http://localhost:8545 \
 ```
+
+run op-node
+``` bash
+$ ./bin/op-node \
+  --l2=http://localhost:8551 \
+  --l2.jwt-secret=./jwt.txt \
+  --sequencer.enabled \
+  --sequencer.l1-confs=5 \
+  --verifier.l1-confs=4 \
+  --rollup.config=./rollup.json \
+  --rpc.addr=0.0.0.0 \
+  --rpc.port=8547 \
+  --p2p.disable \
+  --rpc.enable-admin \
+  --p2p.sequencer.key=$GS_SEQUENCER_PRIVATE_KEY \
+  --l1=$L1_RPC_URL \
+  --l1.rpckind=$L1_RPC_KIND --l1.domicon-nodes-contract=0xF90ba1FDe4363570cc6555EBF3801a9852acb88f
+```
