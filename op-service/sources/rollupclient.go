@@ -65,6 +65,11 @@ func (r *RollupClient) SendDA(ctx context.Context, index, length uint64, broadca
 	//log.Info("msg sendDA", "data", data)
 	var result common.Hash
 	err := r.rpc.CallContext(ctx, &result, "optimism_sendDA", index, length, 0, broadcaster, user, commitment, sign, data)
+	if err == nil {
+		log.Info("msg sendDA", "call optimism_sendDA success hash", result)
+	} else {
+		log.Info("msg sendDA", "call optimism_sendDA faild with error:", err)
+	}
 	return result, err
 }
 
